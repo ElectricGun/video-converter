@@ -4,24 +4,25 @@ import multiprocessing as mp
 import cv2
 import math as Math
 
-outputDir = ""    #insert dir
+outputDir = ""    #insert output dir
 media = ""    #insert file
 length = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
-resize = 25 / 100    #resize percentage
+resize = 100 / 100    #resize percentage
 
 cpuThreads = mp.cpu_count()
-nprocesses = cpuThreads
-framesPerProcess = Math.floor(length / nprocesses)
+nprocesses = 12
+framesPerProcess = Math.ceil(length / nprocesses)     #rough frames per process amount
 
-def parseToFile(media, outputDir, length, thread):
+def parseToFile(media, outputDir, batchLength, endFrame, processName):
 
     fileName = media.split("/")[-1]
-    outputFileName = os.path.join(outputDir, fileName+"_raw"+str(thread)+".txt")
+    outputFileName = os.path.join(outputDir, fileName+"_raw"+str(processName)+".txt")
     outputFile = open(outputFileName, "w")
 
-    startFrame = thread * framesPerProcess
+    startFrame = processName * framesPerProcess
 
-    for currFrame in range(startFrame, length):
+    #print("Process:", processName, startFrame, endFrame, batchLength, "\n")
+    for currFrame in range(startFrame, endFrame):
         outputFile.write("[")    #open array
         
         cap = cv2.VideoCapture(media)
@@ -80,10 +81,10 @@ def parseToFile(media, outputDir, length, thread):
         outputString = "],\n[".join(",".join(str(x[0]) for x in y) for y in output)
         outputFile.write("["+outputString+"]")
         outputFile.write("]\n")    #close array
-
-        if thread == 0:
-            print(str((currFrame / framesPerProcess) * 100)+"% complete")           #print percentage
-
+        
+        if processName == 0:
+            print(str(((currFrame - startFrame) / (endFrame - startFrame) * 100))+"% complete"+"\n")           #print percentage
+    print("Process", processName + 1, "complete")
     outputFile.close()
 
 
@@ -91,13 +92,18 @@ def parseToFile(media, outputDir, length, thread):
 if __name__ == "__main__":
     processes = []
     totalLength = 0
+    realTotalLength = 0
     for i in range(nprocesses):
         batchLength = framesPerProcess
         totalLength += batchLength
         remaindingLength = length - totalLength
-        if remaindingLength < batchLength:
-            batchLength = remaindingLength
-        process = mp.Process(target=parseToFile, args=(media, outputDir, batchLength, i))
+
+        if remaindingLength < 0:
+            batchLength += remaindingLength
+        realTotalLength += batchLength
+
+        process = mp.Process(target=parseToFile, args=(media, outputDir,  batchLength, realTotalLength, i))
         processes.append(process)
     for i in range(nprocesses):
         processes[i].start()
+        print(processes[i].name, "started! \n")
