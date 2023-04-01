@@ -1,21 +1,25 @@
 import os
-import time as t
+import json
 import multiprocessing as mp
 import cv2
 import math as Math
 
-outputDir = ""    #insert output dir
-media = ""    #insert file
+outputDir = "./output"    #insert output dir
+media = "media"    #insert file
+fileName = media.split("/")[-1]
+
 length = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
-#length = 200    #length override
-resize = 10 / 100    #resize percentage
+fps = cv2.VideoCapture(media).get(cv2.CAP_PROP_FPS)
+length = int(10 * fps)    #length override in seconds
+resize = 5 / 100    #resize percentage
 
 cpuThreads = mp.cpu_count()
-nprocesses = 1
-framesPerProcess = Math.ceil(length / nprocesses)     #rough frames per process amount
+nprocesses = 12
+framesPerProcess = Math.ceil(length / nprocesses)    #rough frames per process amount
 treshold = 100000    #maximum array size per file
 
-def scale(height, width, scale):    #define skips as array to work with a non integer resize factor
+
+def scale(height, width, scale):    #define skips to work with an odd resize factor
                             
     newHeight, newWidth = Math.ceil(height * scale), Math.ceil(width * scale)
     try:
@@ -45,9 +49,9 @@ def scale(height, width, scale):    #define skips as array to work with a non in
     return newHeight, newWidth, skipsHeight, skipsWidth
     
 
-def parseToFile(media, outputDir, batchLength, endFrame, processName):
 
-    fileName = media.split("/")[-1]
+def parseToFile(media, batchLength, endFrame, processName):
+
     startFrame = processName * framesPerProcess
     
 
@@ -56,7 +60,7 @@ def parseToFile(media, outputDir, batchLength, endFrame, processName):
     while True:
         if stop == True: break
 
-        outputFileName = os.path.join(outputDir, fileName+"_raw"+str(processName)+"_"+str(subBatchNumber)+".json")
+        outputFileName = os.path.join(outputDir, fileName+str(processName)+"_"+str(subBatchNumber)+"_TEMP")
         outputFile = open(outputFileName, "w")
         outputFile.write("{\"seq\":\n")    #open json
         outputFile.write("[")    #open batch array
@@ -73,7 +77,6 @@ def parseToFile(media, outputDir, batchLength, endFrame, processName):
             outputFile.write("[")    #open frame array
             
             cap = cv2.VideoCapture(media)
-            #fps = int(cap.get(cv2.CAP_PROP_FPS))
             cap.set(1, currFrame)                                               
             res, frame = cap.read()
             try:
@@ -128,8 +131,16 @@ def parseToFile(media, outputDir, batchLength, endFrame, processName):
     print(totalSubBatchOutputLength, "Process:", processName, "\n")   
 
 
+def flushJson(var, fileName, index):
+
+    print("Length", len(var[2]), "Index", index)
+    outputFile = open(os.path.join(outputDir, fileName+str(index))+".json", "w")
+    object = json.dumps({"fps": var[0], "batchSize": var[1], "seq": var[2]})
+    outputFile.write(object)
+
 
 if __name__ == "__main__":
+
     processes = []
     totalLength = 0
     realTotalLength = 0
@@ -142,7 +153,7 @@ if __name__ == "__main__":
             batchLength += remaindingLength
         realTotalLength += batchLength
 
-        process = mp.Process(target=parseToFile, args=(media, outputDir,  batchLength, realTotalLength, i))
+        process = mp.Process(target=parseToFile, args=(media,  batchLength, realTotalLength, i))
         processes.append(process)
     for i in range(nprocesses):
         processes[i].start()
@@ -158,4 +169,49 @@ if __name__ == "__main__":
                 done = 0
                 break
     print("Complete")
-    #intitate finalisation
+
+    ##############################################    intitate finalisation
+
+    batchID = 0
+    subBatchID = 0
+    currTotalFiles = 0
+    loadFileName = os.path.join(outputDir, fileName)
+
+    seq = []
+    totalBatchLength = 0
+    while True:
+        subBatchID = 0
+        print(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP")
+        try:
+            outputFile = open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read()
+        except FileNotFoundError:
+            print("Next file not found, finishing...")
+            output = [fps, len(seq), list(seq)]
+            flushJson(output, fileName, currTotalFiles); currTotalFiles += 1
+            break
+
+        while True:
+            try:
+                outputArray = json.loads(open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read())["seq"]
+                for i in range(len(outputArray)):
+
+                    currFrame = outputArray[i]
+                    frameLength = len(currFrame) * len(currFrame[0])
+                    totalBatchLength += frameLength
+                    if (isinstance(currFrame, str) != True):
+                        seq.append(currFrame)
+
+                    if totalBatchLength + frameLength > treshold:
+                        output = [fps, len(seq), list(seq)]
+                        flushJson(output, fileName, currTotalFiles); currTotalFiles += 1
+                        seq.clear()
+                        totalBatchLength = 0
+
+                os.remove(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP"); print("File deleted")
+                subBatchID += 1
+            except FileNotFoundError:
+                print("File not found, next batch...")
+                break
+
+        batchID += 1
+    print("Completed, total", currTotalFiles + 1, "files")
