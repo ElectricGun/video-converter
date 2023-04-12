@@ -1,27 +1,46 @@
 import os
 import json
 import multiprocessing as mp
-import cv2
 import math as Math
+try:
+    import cv2
+except:
+    print("OpenCV is not installed!")
 
 outputDir = "./output"    #insert output dir
 media = "media"    #insert file
 fileName = media.split("/")[-1]
 
 length = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
+length -= 1    #gets rid of last frame to avoid weird bug
 fps = cv2.VideoCapture(media).get(cv2.CAP_PROP_FPS)
-length = int(10 * fps)    #length override in seconds
-resize = 5 / 100    #resize percentage
 
 cpuThreads = mp.cpu_count()
-nprocesses = 12
-framesPerProcess = Math.ceil(length / nprocesses)    #rough frames per process amount
+nprocesses = cpuThreads
+
+
 treshold = 100000    #maximum array size per file
+lengthOverride = 50    #length override in seconds
+lengthOverride = int(lengthOverride * fps)
+
+if (lengthOverride > length / fps):
+    pass
+elif (lengthOverride <= 0):
+    pass
+else:
+    length = lengthOverride
+    
+resize = 5 / 100    #resize percentage
+#nprocesses = 1    #number of processes override
+step = 1    #number of frames per step
 
 
-def scale(height, width, scale):    #define skips to work with an odd resize factor
+framesPerProcess = Math.ceil(length / nprocesses)    #rough frames per process amount
+
+def scale(height, width, factor):    #define skips to work with an odd resize factor
                             
-    newHeight, newWidth = Math.ceil(height * scale), Math.ceil(width * scale)
+    newHeight, newWidth = Math.ceil(height * factor), Math.ceil(width * factor)
+
     try:
         skipH, skipW =  height / newHeight, width / newWidth
     except ZeroDivisionError:
@@ -54,7 +73,6 @@ def parseToFile(media, batchLength, endFrame, processName):
 
     startFrame = processName * framesPerProcess
     
-
     subBatchNumber = 0
     stop = False
     while True:
@@ -73,6 +91,7 @@ def parseToFile(media, batchLength, endFrame, processName):
         newHeight, newWidth, skipsHeight, skipsWidth = scale(height, width, resize)
 
         totalSubBatchOutputLength = 0
+
         for currFrame in range(startFrame, endFrame):
             outputFile.write("[")    #open frame array
             
@@ -84,7 +103,7 @@ def parseToFile(media, batchLength, endFrame, processName):
             except AttributeError:
                 stop = True; break                                                                   
                 
-        ##############################################      parse and write current frame a file
+        #      parse and write current frame a file
 
             output, outputY = [], []
             pickerY = 0
@@ -113,7 +132,7 @@ def parseToFile(media, batchLength, endFrame, processName):
 
             totalSubBatchOutputLength += outputLength
             if processName == 0:
-                #print(str(((currFrame - startFrame) / (endFrame - startFrame) * 100))+"% complete"+"\n", totalSubBatchOutputLength)           #print percentage
+                print(str(((currFrame - startFrame) / (endFrame - startFrame) * 100))+"% complete"+"\n")           #print percentage
                 pass
             
             if totalSubBatchOutputLength + outputLength > treshold:
@@ -133,9 +152,13 @@ def parseToFile(media, batchLength, endFrame, processName):
 
 def flushJson(var, fileName, index):
 
-    print("Length", len(var[2]), "Index", index)
+    print("Length", len(var[1]), "Index", index)
     outputFile = open(os.path.join(outputDir, fileName+str(index))+".json", "w")
-    object = json.dumps({"fps": var[0], "batchSize": var[1], "seq": var[2]})
+    object = json.dumps({
+        "fps": var[0] / step,
+        "batchSize": len(var[1]), 
+        "seq": var[1]
+    })
     outputFile.write(object)
 
 
@@ -170,7 +193,7 @@ if __name__ == "__main__":
                 break
     print("Complete")
 
-    ##############################################    intitate finalisation
+    #    intitate finalisation
 
     batchID = 0
     subBatchID = 0
@@ -186,7 +209,7 @@ if __name__ == "__main__":
             outputFile = open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read()
         except FileNotFoundError:
             print("Next file not found, finishing...")
-            output = [fps, len(seq), list(seq)]
+            output = [fps, list(seq)]
             flushJson(output, fileName, currTotalFiles); currTotalFiles += 1
             break
 
@@ -202,7 +225,7 @@ if __name__ == "__main__":
                         seq.append(currFrame)
 
                     if totalBatchLength + frameLength > treshold:
-                        output = [fps, len(seq), list(seq)]
+                        output = [fps, list(seq)]
                         flushJson(output, fileName, currTotalFiles); currTotalFiles += 1
                         seq.clear()
                         totalBatchLength = 0
@@ -214,4 +237,8 @@ if __name__ == "__main__":
                 break
 
         batchID += 1
-    print("Completed, total", currTotalFiles + 1, "files")
+    print("Completed all processes, total", currTotalFiles, "files")
+
+    headerFile = open(os.path.join(outputDir, fileName + "config")+".json", "w")
+    headerFile.write('{"totalBatches": ' + str(currTotalFiles) + '}')
+    headerFile.close()
