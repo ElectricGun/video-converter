@@ -26,7 +26,7 @@ cpuThreads = mp.cpu_count()
 nprocesses = cpuThreads
 
 treshold = 500000    #maximum array size per file
-lengthOverride = 10    #length override in seconds
+lengthOverride = 1    #length override in seconds
 lengthOverride = int(lengthOverride * fps)
 
 if (lengthOverride > length / fps):
