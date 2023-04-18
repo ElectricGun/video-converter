@@ -44,7 +44,7 @@ if (processesOverride > 0):
 
 framesPerProcess = Math.ceil(length / nprocesses)    #rough frames per process amount
 
-palette = [    #values are adjusted red = blast, green = plast, blue = titanium
+palette = [
     [217, 157, 115], [140, 127, 169], [235, 238, 245], [149, 171, 217], #copper, lead, metaglass, graphite
     [247, 203, 164], [39, 39, 39], [141, 161, 227], [249, 163, 199],    #sand, coal, titanium, thorium
     [119, 119, 119], [83, 86, 92], [203, 217, 127], [244, 186, 110],    #scrap, silicon, plastanium, phase
@@ -83,7 +83,9 @@ def getHSV(rgb):
     value = maxrgb
     return hue, saturation, value
 
-
+paletteHSV = []
+for col in palette:
+    paletteHSV.append(getHSV(col))
 
 def humanCol(col):
     humanEyeWeights = [0.3, 0.59, 0.11]
@@ -106,9 +108,6 @@ def compareColHSV(hsv1, hsv2):
     out = 1 - dist / maxDist
     return out
 
-paletteHSV = []
-for col in palette:
-    paletteHSV.append(getHSV(col))
 
 def colToResource(col1, palette):
     similarityIndeces = []
