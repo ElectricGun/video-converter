@@ -1,6 +1,6 @@
-#TODO: mpeg style compression algorithm to render massive resolutions at more than 1 fps lag probably wont go away because sorters are laggy
-#      use walls instead of sorters to avoid lag
+#TODO: mpeg style compression algorithm to render medium resolutions at more than 1 fps
 #      give each pixel a position or skip value, dont draw over similar pixels
+#      store colour configurations in file after done rendering
 
 import os
 import json
@@ -14,20 +14,22 @@ try:
 except:
     print("OpenCV is not installed!")
 
-outputDir = "./output"    #insert output dir
-media = "media"    #insert file
-fileName = media.split("/")[-1]
+outputDir = "./output"      #insert output dir
+media = "media"             #insert filename
+treshold = 500000           #maximum array size per file
+lengthOverride = 0          #length override in seconds
+accurateMode = True         #compares using hsv instead of rgb, impacts performance
+resize = 7 / 100            #resize percentage
+processesOverride = 0       #number of processes override
+step = 1                    #set to skip n number of frams per cycle
 
+fileName = media.split("/")[-1]
 length = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
 length -= 2    #gets rid of last few frames to avoid weird bug
 fps = cv2.VideoCapture(media).get(cv2.CAP_PROP_FPS)
-
+lengthOverride = int(lengthOverride * fps)
 cpuThreads = mp.cpu_count()
 nprocesses = cpuThreads
-
-treshold = 500000    #maximum array size per file
-lengthOverride = 1    #length override in seconds
-lengthOverride = int(lengthOverride * fps)
 
 if (lengthOverride > length / fps):
     pass
@@ -35,37 +37,53 @@ elif (lengthOverride <= 0):
     pass
 else:
     length = lengthOverride
-    
-resize = 10 / 100    #resize percentage
-#nprocesses = 1    #number of processes override
-step = 1    #number of frames per step
+
+if (processesOverride > 0):
+    nprocesses = processesOverride
 
 
 framesPerProcess = Math.ceil(length / nprocesses)    #rough frames per process amount
 
 palette = [    #values are adjusted red = blast, green = plast, blue = titanium
-    [217, 157, 115], [140, 127, 169], [235, 238, 245], [178, 198, 210],    #copper, lead, metaglass, graphite
-    [247, 203, 164], [39, 39, 39], [50, 50, 255], [249, 163, 199],    #sand, coal, titanium, thorium
-    [119, 119, 119], [83, 86, 92], [50, 255, 50], [244, 186, 110],    #scrap, silicon, plastanium, phase
-    [241, 231, 120], [255, 50, 255], [255, 50, 50], [253, 169, 94]    #surge, spore, blast, pyratite
+    [217, 157, 115], [140, 127, 169], [235, 238, 245], [149, 171, 217], #copper, lead, metaglass, graphite
+    [247, 203, 164], [39, 39, 39], [141, 161, 227], [249, 163, 199],    #sand, coal, titanium, thorium
+    [119, 119, 119], [83, 86, 92], [203, 217, 127], [244, 186, 110],    #scrap, silicon, plastanium, phase
+    [243, 233, 121], [116, 87, 206], [255, 121, 94], [255, 170, 95],    #surge, spore, blast, pyratite
+    [58, 143, 100], [118, 138, 154], [227, 255, 214], [137, 118, 154],  #beryllium, tungsten, oxide, carbide
+    [94, 152, 141], [223, 130, 77]                                      #fissileMatter, dormantCyst
 ]
 
-resources = ("copper, lead, metaglass, graphite, sand, coal, titanium, throium, scrap, silicon, plastanium, phase, surge, spore, blast, pyratite").split(",")
+resources = [    #only used in debugging
+            "copper", "lead", "metaglass", "graphite",
+            "sand", "coal", "titanium", "thorium",
+            "scrap", "silicon", "plastanium", "phase",
+            "surge", "spore", "blast", "pyratite",
+            "beryllium", "tungsten", "oxide", "carbide",
+            "fissileMatter", "dormantCyst"
+]
 
-def getHue(rgb):
+def getHSV(rgb):
     rgb = np.divide(rgb, 255)
     r, g, b = rgb[0], rgb[1], rgb[2]
     maxrgb = max(r, g, b)
     minrgb = min(r, g, b)
     diff = maxrgb - minrgb
     if (maxrgb == minrgb):
-        return 0
-    if (maxrgb == r):
-        return (60 * ((g - b) / diff) + 360) % 360
+        hue = 0
+    elif (maxrgb == r):
+        hue = (60 * ((g - b) / diff) + 360) % 360
     elif (maxrgb == g):
-        return (60 * ((b - r) / diff) + 120) % 360
+        hue = (60 * ((b - r) / diff) + 120) % 360
     elif (maxrgb == b):
-        return (60 * ((r - g) / diff) + 240) % 360
+        hue = (60 * ((r - g) / diff) + 240) % 360
+    if (maxrgb == 0):
+        saturation = 0
+    else:
+        saturation = diff/maxrgb
+    value = maxrgb
+    return hue, saturation, value
+
+
 
 def humanCol(col):
     humanEyeWeights = [0.3, 0.59, 0.11]
@@ -79,20 +97,30 @@ def compareCol(rgb1, rgb2):
     x2, y2, z2 = rgb2[0], rgb2[1], rgb2[2]
     dist = Math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
     return 1 - dist / maxDist
-    #hue1 = getHue(humanCol(rgb1))
-    #hue2 = getHue(humanCol(rgb2))
-    #return abs(hue2 - hue1) / 360
 
-hues = []
+def compareColHSV(hsv1, hsv2):
+    maxDist = 3
+    h1, s1, v1 = hsv1[0], hsv1[1], hsv1[2]
+    h2, s2, v2 = hsv2[0], hsv2[1], hsv2[2] 
+    dist = Math.sqrt((Math.sin(h1)*s1*v1 - Math.sin(h2)*s2*v2)**2 + (Math.cos(h1)*s1*v1 - Math.cos(h2)*s2*v2)**2 + (v2 - v1)**2)
+    out = 1 - dist / maxDist
+    return out
+
+paletteHSV = []
 for col in palette:
-    hues.append(getHue(col))
+    paletteHSV.append(getHSV(col))
 
 def colToResource(col1, palette):
     similarityIndeces = []
-    for col2 in palette:
-        similarityIndeces.append(compareCol(col1, col2))
+    if accurateMode:
+        for hsv2 in paletteHSV:
+            hsv1 = getHSV(col1)
+            similarityIndeces.append(compareColHSV(hsv1, hsv2))
+    else:
+        for col2 in palette:
+            similarityIndeces.append(compareCol(col1, col2))
+
     similar = similarityIndeces.index(max(similarityIndeces))
-    print("waste of cpu detected")
     return similar    #get index of the highest value in indeces array
 
 def scale(height, width, factor):    #define skips to work with an odd resize factor
@@ -125,8 +153,6 @@ def scale(height, width, factor):    #define skips to work with an odd resize fa
 
     return newHeight, newWidth, skipsHeight, skipsWidth
 
-queue = Queue(maxsize=1)
-
 def parseToFile(media, batchLength, endFrame, processName):
 
     startFrame = (processName * framesPerProcess) + 1
@@ -137,14 +163,13 @@ def parseToFile(media, batchLength, endFrame, processName):
         
     resourceTable = {}    #table containing resources
     while True:
-        print(processName, "resetting...")
-        if stop == True or startFrame > endFrame: break
-        #print(processName, startFrame, endFrame)
+        if stop == True or startFrame >= endFrame: break
+        print(processName, startFrame, endFrame)
 
         outputFileName = os.path.join(outputDir, fileName+str(processName)+"_"+str(subBatchNumber)+"_TEMP")
         outputFile = open(outputFileName, "w")
         outputFile.write("{\"seq\":\n")    #open json
-        outputFile.write("[")    #open batch array
+        outputFile.write("[")              #open batch array
 
         cap = cv2.VideoCapture(media)
         cap.set(1, 0)                                               
@@ -166,8 +191,7 @@ def parseToFile(media, batchLength, endFrame, processName):
             except AttributeError:
                 stop = True; break                                                                   
                 
-            #   parse and write current frame a file
-            #print(processName, "parsing...", "\n")
+            #    start the conversion
 
             output, outputY = [], []
             pickerY = 0
@@ -181,31 +205,12 @@ def parseToFile(media, batchLength, endFrame, processName):
                 for x in range(0, newWidth - 1):
                     pickerX += skipsWidth[x]
                     frameCol = frame[pickerY][pickerX]
-                    #goofy ahh code
-                    #try:
-                    #    resourceTable = json.loads(open(os.path.join(outputDir, fileName+"colours")+".json", "r").read())
-                    #    #print(json.loads(open(os.path.join(outputDir, fileName+"colours")+".json", "r").read()))
-                    #except Exception as e:
-                    #    #print(e)
-                    #    queue.put("susssy")
-                    #    flushColour(str(frameCol), colToResource(frameCol, palette))
-                    #    pass
-                    #
-                    #try:
-                    #    try:
-                    #        resource = resourceTable[str(frameCol)]
-                    #    except:
-                    #        resource = colToResource(frameCol, palette)
-                    #        resourceTable[str(frameCol)] = resource
-                    #        #print(resourceTable)
-                    #        queue.put("susssy")
-                    #        flushColour(str(frameCol), resource)
                     try:
                         try:
-                            resource = resourceTable[str(frameCol)]
+                            resource = resourceTable[str(frameCol)]    
                         except:
                             resource = colToResource(frameCol, palette)
-                            resourceTable[str(frameCol)] = resource
+                            resourceTable[str(frameCol)] = resource    #cache colour and its resource to a table
 
                     except IndexError as e:
                         print(e)
@@ -222,7 +227,7 @@ def parseToFile(media, batchLength, endFrame, processName):
             totalSubBatchOutputLength += outputLength
 
             if processName == 0:
-                print(len(resourceTable), str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete"+"\n")           #print percentage
+                print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", "cache: ", len(resourceTable), "\n")          #print percentage
 
             
             if (totalSubBatchOutputLength + outputLength > treshold) & (currFrame - startFrame != 0):
@@ -235,12 +240,12 @@ def parseToFile(media, batchLength, endFrame, processName):
             
                 
         outputFile.write("\"STOP\"]")    #close batch array
-        outputFile.write("\n}")    #close json
+        outputFile.write("\n}")          #close json
         outputFile.close()
     print("Process", processName + 1, "complete")
     print(totalSubBatchOutputLength, "Process:", processName, "\n")   
 
-def getFrameProperty(media, frame):
+def getAspectRatio(media, frame):
     cap = cv2.VideoCapture(media)
     cap.set(1, frame)                                               
     res, frame = cap.read()
@@ -249,7 +254,7 @@ def getFrameProperty(media, frame):
     except AttributeError:
         pass
     height, width, var1, var2 = scale(height, width, resize)
-    return height, width
+    return width, height
 
 def flushJson(var, fileName, index):
 
@@ -261,27 +266,6 @@ def flushJson(var, fileName, index):
         "seq": var[1]
     })
     outputFile.write(object)
-
-#goofy ahh function
-#def flushColour(str, var, i):
-#
-#    object = {}
-#    try:
-#        object = json.loads(open(os.path.join(outputDir, fileName+"colours")+ i +".json", "r").read())
-#        object[str] = var
-#        print("object: ", object)
-#        object = json.dumps(object)
-#    except Exception as e:
-#        print(e)
-#        object = json.dumps({
-#            str: var,
-#        }, indent=0)
-#    colourFile = open(os.path.join(outputDir, fileName+"colours")+".json", "w+")
-#    print(object)
-#
-#    colourFile.write(object)
-#    colourFile.close()
-#    queue.get()
 
 if __name__ == "__main__":
 
@@ -301,9 +285,8 @@ if __name__ == "__main__":
         process = mp.Process(target=parseToFile, args=(media,  batchLength, realTotalLength, i))
         processes.append(process)
 
-    print("Output will be ", getFrameProperty(media, 0), "continue?")
-    #input("")
-
+    print("Output will be", getAspectRatio(media, 0), "continue?")
+    t.sleep(3)
 
     for i in range(nprocesses):
         processes[i].start()
@@ -344,10 +327,10 @@ if __name__ == "__main__":
             try:
                 outputArray = json.loads(open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read())["seq"]
                 for i in range(len(outputArray)):
-
                     currFrame = outputArray[i]
                     frameLength = len(currFrame) * len(currFrame[0])
                     totalBatchLength += frameLength
+
                     if (isinstance(currFrame, str) != True):
                         seq.append(currFrame)
 
@@ -362,7 +345,6 @@ if __name__ == "__main__":
             except FileNotFoundError:
                 print("File not found, next batch...")
                 break
-
         batchID += 1
     print("Completed all processes, total", currTotalFiles, "files")
 
