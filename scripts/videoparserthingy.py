@@ -15,7 +15,7 @@ try:
 except:
     print("OpenCV-python is not installed!")
 
-outputDir = "/home/lenovo/Desktop/Link to Mindustry/mods/renderer2/animations"      #insert output dira
+outputDir = "./output"      #insert output dira
 treshold = 500000           #maximum array size per file
 colourMode = 3              #0: euclidean distance
                             #1: hsv compare (slow)
