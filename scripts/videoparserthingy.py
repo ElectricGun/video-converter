@@ -1,7 +1,7 @@
 #TODO: mpeg style compression algorithm to render medium resolutions at more than 1 fps
 #      give each pixel a position or skip value, dont draw over similar pixels
-#      store colour configurations in file after done rendering
-#      compare using euclidean srgb distance for more accuracy
+#      multithreaded caching
+#      optimise... or not
 
 import os
 import json
@@ -13,12 +13,17 @@ import time as t
 try:
     import cv2
 except:
-    print("OpenCV is not installed!")
+    print("OpenCV-python is not installed!")
 
-outputDir = "./output"      #insert output dir
+outputDir = "/home/lenovo/Desktop/Link to Mindustry/mods/renderer2/animations"      #insert output dira
 treshold = 500000           #maximum array size per file
-accurateMode = False         #slightly more accurate colour output, impacts performance
-resize = 5 / 100            #resize percentage
+colourMode = 3              #0: euclidean distance
+                            #1: hsv compare (slow)
+                            #2: barycentric distance (hue only, may result in goofy output)
+                            #3: flann (fast with caching, slow without)
+fileCaching = True          #creates file colour cache based on colour mode
+                            #creating cache for the first time may be extremely slow due to badly written code
+resize = 20 / 100            #resize percentage
 processesOverride = 0       #number of processes override
 step = 1                    #set to skip n number of frams per cycle
 
@@ -27,6 +32,9 @@ nprocesses = cpuThreads
 
 if (processesOverride > 0):
     nprocesses = processesOverride
+
+paletteCacheDir = "./palettes/" + "palette" + str(colourMode) + ".json"
+print(paletteCacheDir)
 
 palette = [
     [217, 157, 115], [140, 127, 169], [235, 238, 245], [149, 171, 217], #copper, lead, metaglass, graphite
@@ -45,6 +53,19 @@ resources = [    #only used in debugging
             "beryllium", "tungsten", "oxide", "carbide",
             "fissileMatter", "dormantCyst"
 ]
+
+#    initiate flann
+norm = cv2.NORM_L2
+FLANN_INDEX_KDTREE = 1
+index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=10)
+search_params = dict(checks=100)
+fm = cv2.FlannBasedMatcher(index_params, search_params)
+
+def flannFrame(frame, width, height, depth):
+    matches = fm.match(np.asarray(frame, dtype=np.float32).reshape(-1, 3), np.asarray(palette, dtype=np.float32))
+    indices = np.uint8([m.trainIdx for m in matches])
+    indices = indices.reshape(height, width, depth).tolist()
+    return indices
 
 def getHSV(rgb):
     rgb = np.divide(rgb, 255)
@@ -71,16 +92,16 @@ def humanCol(col):
     humanEyeWeights = [0.3, 0.59, 0.11]
     return np.multiply(col, humanEyeWeights)
 
-paletteHuman = []
-for col in palette:
-    paletteHuman.append(humanCol(col))
+#paletteHuman = []
+#for col in palette:
+#    paletteHuman.append(humanCol(col))
 paletteHSV = []
-for col in paletteHuman:
+for col in palette:
     paletteHSV.append(getHSV(col))
     
 def compareCol(rgb1, rgb2):
-    rgb1 = humanCol(rgb1)
-    rgb2 = humanCol(rgb2)
+    #rgb1 = humanCol(rgb1)
+    #rgb2 = humanCol(rgb2)
     maxDist = 441.6729559300637
     x1, y1, z1 = rgb1[0], rgb1[1], rgb1[2]
     x2, y2, z2 = rgb2[0], rgb2[1], rgb2[2]
@@ -95,21 +116,89 @@ def compareColHSV(hsv1, hsv2):
     out = 1 - dist / maxDist
     return out
 
-
+def barycentricDistance(rgb1, rgb2):
+    #rgb1 = humanCol(rgb1)
+    #rgb2 = humanCol(rgb2)
+    rgb1, rgb2 = np.add(rgb1, 1), np.add(rgb2, 1)
+    v1, v2 = (max(rgb1) / 255), (max(rgb2) / 255)
+    diff = 1 - Math.sqrt((v2 - v1)**2)
+    a, b, c = {"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 0, "y": 1}
+    sum1, sum2 = sum(rgb1), sum(rgb2)
+    average1, average2 = sum1 / 3, sum2 / 3
+    rgb1 = np.divide(rgb1, sum1) 
+    rgb2 = np.divide(rgb2, sum2) 
+    x1, y1 = a["x"] * rgb1[0] + b["x"] * rgb1[1] + c["x"] * rgb1[2], a["y"] * rgb1[0] + b["y"] * rgb1[1] + c["y"] * rgb1[2]
+    x2, y2 = a["x"] * rgb2[0] + b["x"] * rgb2[1] + c["x"] * rgb2[2], a["y"] * rgb2[0] + b["y"] * rgb2[1] + c["y"] * rgb2[2]
+    dist = Math.dist([x1, y1, v1], [x2, y2, v2])
+    #print(dist)
+    return 1 - dist #, [x1, y1, v1 * 100], [x2, y2, v2 * 100]
+    
 def colToResource(col1, palette):
     similarityIndeces = []
-    if accurateMode:
+    if colourMode == 0:
+        for col2 in palette:
+            similarityIndeces.append(compareCol(col1, col2))
+            similar = similarityIndeces.index(max(similarityIndeces))
+    elif colourMode == 1:
         for hsv2 in paletteHSV:
             hsv1 = getHSV(col1)
             similarityIndeces.append(compareColHSV(hsv1, hsv2))
+            similar = similarityIndeces.index(max(similarityIndeces))
+    elif colourMode == 2:
+        for col2 in palette:
+            similarityIndeces.append(barycentricDistance(col1, col2))
+            similar = similarityIndeces.index(max(similarityIndeces))
+    #elif colourMode == 3:
+    #    similar =  flannFrame([[[col1]]], 1, 1)[0][0]
     else:
         for col2 in palette:
             similarityIndeces.append(compareCol(col1, col2))
+            similar = similarityIndeces.index(max(similarityIndeces))
 
-    similar = similarityIndeces.index(max(similarityIndeces))
-    print(resources[similar])
+    #print(similar, resources[similar])
     return similar    #get index of the highest value in indeces array
 
+def cache(palette):
+    #cache = [[[[None] for i in range(256)] for j in range(256)] for k in range(256)]
+    if colourMode != 3:
+        cache = np.zeros((256, 256, 256))
+        i = 0
+        for r in range(256):
+            for g in range(256):
+                for b in range(256):
+                    similarIndex = colToResource([r, g, b], palette)
+                    #similarIndex = np.argmin(np.sqrt(np.sum(((palette) - np.array([r, g, b]))**2, axis=1)))
+                    print("Processing palette:", ([r, g, b], resources[similarIndex]), (i / 256**3) * 100, "percent")
+                    i += 1
+                    cache[r][g][b] = int(similarIndex)
+        cache = np.uint32(cache)
+    else:
+        cache = np.uint32([
+        [r, g, b]
+        for r in range(256)
+        for g in range(256)
+        for b in range(256)
+        ])
+        print("Flanning the cache...")
+        cache = flannFrame(cache, 256, 256, 256)
+        #print(cache)
+    return cache
+
+if fileCaching:
+    if (os.path.exists(paletteCacheDir)):
+        print("Loading palette...")
+        paletteCache = json.loads(open(paletteCacheDir, "r").read())["cache"]
+        print("Palette found")
+    else:
+        print("Creating cache...")
+        paletteCache = cache(palette)
+        if colourMode != 3:
+            open(paletteCacheDir, "w").write(json.dumps({"cache": paletteCache.tolist()}))
+        else:
+            open(paletteCacheDir, "w").write(json.dumps({"cache": paletteCache}))
+        print("Cached palette")
+    t.sleep(.1)
+    cacheSize = len(paletteCache) * len(paletteCache[0]) * len(paletteCache[0][0])
 
 def scale(height, width, factor):    #define skips to work with an odd resize factor
                             
@@ -141,45 +230,56 @@ def scale(height, width, factor):    #define skips to work with an odd resize fa
 
     return newHeight, newWidth, skipsHeight, skipsWidth
 
-def parseToFile(media, batchLength, endFrame, processName, fileName, outputFolderDir, framesPerProcess):
+def parseToFile(media, endFrame, processName, fileName, outputFolderDir, framesPerProcess):    #cant have enough args
+
+    #    define variables
 
     startFrame = (processName * framesPerProcess) + 1
     firstStartFrame = startFrame
-    
     subBatchNumber = 0
     stop = False
-        
-    resourceTable = {}    #table containing resources
+    
+    resourceTable = {}    #table containing resources using ram for when fileCaching == False
     while True:
-        if stop == True or startFrame >= endFrame: break
-        print(processName, startFrame, endFrame)
+        
+        if stop == True or startFrame >= endFrame: break    #prevent infinite loop
+
+        #    define output file
 
         outputFileName = os.path.join(outputFolderDir, fileName+str(processName)+"_"+str(subBatchNumber)+"_TEMP")
         outputFile = open(outputFileName, "w")
         outputFile.write("{\"seq\":\n")    #open json
         outputFile.write("[")              #open batch array
 
+        #    define video shape
+
         cap = cv2.VideoCapture(media)
         cap.set(1, 0)                                               
         _, frame = cap.read()
         height, width, channels = frame.shape    #get frame shape of first frame
-        
         newHeight, newWidth, skipsHeight, skipsWidth = scale(height, width, resize)
 
         totalSubBatchOutputLength = 0
-
         for currFrame in range(startFrame, endFrame):
-            outputFile.write("[")    #open frame array
+
+            #    read frame
             
-            cap = cv2.VideoCapture(media, cv2.CAP_FFMPEG)
             cap.set(1, currFrame)                                               
-            res, frame = cap.read()
+            _, frame = cap.read()
             try:
                 height, width, channels = frame.shape
-            except AttributeError:
+            except AttributeError as e:
+                print(e)
                 stop = True; break                                                                   
-                
-            #    start the conversion
+
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            flannedFrame = []
+            if colourMode == 3:
+                if fileCaching != True:
+                    flannedFrame = flannFrame(frame, width, height, 1)
+
+            #    start the conversion (might rewrite if i HAVE to (i dont))
 
             output, outputY = [], []
             pickerY = 0
@@ -193,45 +293,58 @@ def parseToFile(media, batchLength, endFrame, processName, fileName, outputFolde
                 for x in range(0, newWidth - 1):
                     pickerX += skipsWidth[x]
                     frameCol = frame[pickerY][pickerX]
-                    try:
+                    r, g, b = frameCol[0], frameCol[1], frameCol[2]
+                    if colourMode == 3:
                         try:
-                            resource = resourceTable[str(frameCol)]    
+                            if fileCaching != True:
+                                raise Exception
+                            resource = paletteCache[r][g][b]
+                        except Exception as e:
+                            resource = flannedFrame[pickerY][pickerX]
+                    else:
+                        try:
+                            if fileCaching != True:
+                                raise Exception
+                            resource = paletteCache[r][g][b]
                         except:
-                            resource = colToResource(frameCol, palette)
-                            resourceTable[str(frameCol)] = resource    #cache colour and its resource to a table
+                            try:
+                                try:
+                                    resource = resourceTable[str(frameCol)]    
+                                except:
+                                    resource = colToResource(frameCol, palette)
+                                    resourceTable[str(frameCol)] = resource    #cache colour and its resource to a table
 
-                    except IndexError as e:
-                        print(e)
-                        resource = 5
-                        pass
+                            except IndexError as e:
+                                print(e)
+                                resource = 5
+                                pass
 
-                    outputY.append(str(resource))
+                    outputY.append(resource)
 
             outputLength = len(output) * len(output[0])          
-            outputString = "],\n[".join(",".join(str(x[0]) for x in y) for y in output)
-            outputFile.write("["+outputString+"]")
-            outputFile.write("],\n")    #close frame array
+            outputFile.write(str(output))
+            outputFile.write(",\n")    #close frame array
 
             totalSubBatchOutputLength += outputLength
 
             if processName == 0:
-                print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Colour cache: ", len(resourceTable), "\n")    #print percentage
+                if fileCaching:
+                    print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", cacheSize, "\n")    #print percentage
+                else:
+                    print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", len(resourceTable), "\n")
 
-            
             if (totalSubBatchOutputLength + outputLength > treshold) & (currFrame - startFrame != 0):
                 subBatchNumber += 1
                 startFrame = currFrame + 1
                 print(processName, "Batch exceeded max treshold")
                 break
 
-            if currFrame >= endFrame - 1: stop = True
-            
+            if currFrame >= endFrame - 1: stop = True    #end
                 
         outputFile.write("\"STOP\"]")    #close batch array
         outputFile.write("\n}")          #close json
         outputFile.close()
     print("Process", processName + 1, "complete")
-    print(totalSubBatchOutputLength, "Process:", processName, "\n")   
 
 def getAspectRatio(media, frame):
     cap = cv2.VideoCapture(media)
@@ -244,10 +357,10 @@ def getAspectRatio(media, frame):
     height, width, var1, var2 = scale(height, width, resize)
     return width, height
 
-def flushJson(var, fileName, index, outputFolderDir):
+def flushJson(var, index, outputFolderDir):
 
     print("Length", len(var[1]), "Index", index)
-    outputFile = open(os.path.join(outputFolderDir, fileName+str(index))+".json", "w")
+    outputFile = open(os.path.join(outputFolderDir, "frame"+str(index))+".json", "w")
     object = json.dumps({
         "fps": var[0] / step,
         "batchSize": len(var[1]), 
@@ -256,112 +369,111 @@ def flushJson(var, fileName, index, outputFolderDir):
     outputFile.write(object)
 
 def start(media, outputDir, lengthOverride):
-    if __name__ == "__main__":
-        fileName = media.split("/")[-1]
-        length = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
-        length -= 2    #gets rid of last few frames to avoid weird bug
-        fps = cv2.VideoCapture(media).get(cv2.CAP_PROP_FPS)
-        lengthOverride = int(lengthOverride * fps)
-        cpuThreads = mp.cpu_count()
-        nprocesses = cpuThreads
-        framesPerProcess = Math.ceil(length / nprocesses)    #rough frames per process amount
-        outputFolderDir = ""
+    startTime = t.perf_counter()
 
-        if (lengthOverride > length / fps):
-            pass
-        elif (lengthOverride <= 0):
-            pass
-        else:
-            length = lengthOverride
+    fileName = media.split("/")[-1]
+    length = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
+    length -= 2    #gets rid of last few frames to avoid weird bug
+    fps = cv2.VideoCapture(media).get(cv2.CAP_PROP_FPS)
+    lengthOverride = int(lengthOverride * fps)
+    framesPerProcess = Math.ceil(length / nprocesses)    #rough frames per process amount
+    outputFolderDir = ""
 
-        try:
-            os.mkdir(os.path.join(outputDir, fileName))
-            outputFolderDir = os.path.join(outputDir, fileName)
-        except Exception as e:
-            outputFolderDir = os.path.join(outputDir, fileName)
-            print(e)
+    if (lengthOverride > length / fps):
+        pass
+    elif (lengthOverride <= 0):
+        pass
+    else:
+        length = lengthOverride
 
-        processes = []
-        totalLength = 0
-        totalLength2 = 0
+    try:
+        os.mkdir(os.path.join(outputDir, fileName))
+        outputFolderDir = os.path.join(outputDir, fileName)
+    except Exception as e:
+        outputFolderDir = os.path.join(outputDir, fileName)
+        print(e)
+
+    processes = []
+    totalLength = 0
+    totalLength2 = 0
+    for i in range(nprocesses):
+        batchLength = framesPerProcess
+        totalLength += batchLength
+        remaindingLength = length - totalLength
+
+        if remaindingLength < 0:
+            batchLength += remaindingLength
+        totalLength2 += batchLength
+
+
+        process = mp.Process(target=parseToFile, args=(media, totalLength2, i, fileName, outputFolderDir, framesPerProcess))
+        processes.append(process)
+
+    print("Output will be", getAspectRatio(media, 0), "continue?")
+    t.sleep(3)
+
+    for i in range(nprocesses):
+        processes[i].start()
+        print(processes[i].name, "started! \n")
+    
+    done = 0
+    while True:
+        if (done == 1): break
         for i in range(nprocesses):
-            batchLength = framesPerProcess
-            totalLength += batchLength
-            remaindingLength = length - totalLength
-
-            if remaindingLength < 0:
-                batchLength += remaindingLength
-            totalLength2 += batchLength
-
-
-            process = mp.Process(target=parseToFile, args=(media,  batchLength, totalLength2, i, fileName, outputFolderDir, framesPerProcess))
-            processes.append(process)
-
-        print("Output will be", getAspectRatio(media, 0), "continue?")
-        t.sleep(3)
-
-        for i in range(nprocesses):
-            processes[i].start()
-            print(processes[i].name, "started! \n")
-        
-        done = 0
-        while True:
-            if (done == 1): break
-            for i in range(nprocesses):
-                if (processes[i].is_alive() == False):
-                    done = 1
-                else: 
-                    done = 0
-                    break
-        print("Complete")
-
-        #    intitate finalisation
-
-        batchID = 0
-        subBatchID = 0
-        currTotalFiles = 0
-        loadFileName = os.path.join(outputFolderDir, fileName)
-
-        seq = []
-        totalBatchLength = 0
-        while True:
-            subBatchID = 0
-            print(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP")
-            try:
-                outputFile = open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read()
-            except FileNotFoundError:
-                print("Next file not found, finishing...")
-                output = [fps, list(seq)]
-                flushJson(output, fileName, currTotalFiles, outputFolderDir); currTotalFiles += 1
+            if (processes[i].is_alive() == False):
+                done = 1
+            else: 
+                done = 0
                 break
+    print("Complete")
 
-            while True:
-                try:
-                    outputArray = json.loads(open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read())["seq"]
-                    for i in range(len(outputArray)):
-                        currFrame = outputArray[i]
-                        frameLength = len(currFrame) * len(currFrame[0])
-                        totalBatchLength += frameLength
+    #    intitate finalisation
 
-                        if (isinstance(currFrame, str) != True):
-                            seq.append(currFrame)
+    batchID = 0
+    subBatchID = 0
+    currTotalFiles = 0
+    loadFileName = os.path.join(outputFolderDir, fileName)
 
-                        if totalBatchLength + frameLength > treshold:
-                            output = [fps, list(seq)]
-                            flushJson(output, fileName, currTotalFiles, outputFolderDir); currTotalFiles += 1
-                            seq.clear()
-                            totalBatchLength = 0
+    seq = []
+    totalBatchLength = 0
+    while True:
+        subBatchID = 0
+        print(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP")
+        try:
+            outputFile = open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read()
+        except FileNotFoundError:
+            print("Next file not found, finishing...")
+            output = [fps, list(seq)]
+            flushJson(output, currTotalFiles, outputFolderDir); currTotalFiles += 1
+            break
 
-                    os.remove(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP"); print("File deleted")
-                    subBatchID += 1
-                except FileNotFoundError:
-                    print("File not found, next batch...")
-                    break
-            batchID += 1
-        print("Completed all processes, total", currTotalFiles, "files")
+        while True:
+            try:
+                outputArray = json.loads(open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read())["seq"]
+                for i in range(len(outputArray)):
+                    currFrame = outputArray[i]
+                    frameLength = len(currFrame) * len(currFrame[0])
+                    totalBatchLength += frameLength
 
-        headerFile = open(os.path.join(outputFolderDir, fileName + "config")+".json", "w")
-        headerFile.write('{"totalBatches": ' + str(currTotalFiles) + '}')
-        headerFile.close()
+                    if (isinstance(currFrame, str) != True):
+                        seq.append(currFrame)
 
-start("pringle2", outputDir, 0)
+                    if totalBatchLength + frameLength > treshold:
+                        output = [fps, list(seq)]
+                        flushJson(output, currTotalFiles, outputFolderDir); currTotalFiles += 1
+                        seq.clear()
+                        totalBatchLength = 0
+
+                os.remove(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP"); print("File deleted")
+                subBatchID += 1
+            except FileNotFoundError:
+                print("File not found, next batch...")
+                break
+        batchID += 1
+    print("Completed all processes, total", currTotalFiles, "files", " Time:", t.perf_counter() - startTime, "seconds")
+
+    headerFile = open(os.path.join(outputFolderDir, "frame" + "config")+".json", "w")
+    headerFile.write('{"totalBatches": ' + str(currTotalFiles) + '}')
+    headerFile.close()
+
+start("badapple", outputDir, 0)
