@@ -1,6 +1,4 @@
-#TODO: mpeg style compression algorithm to render huge resolutions
-#      give each pixel a position or skip value, dont draw over similar pixels
-#      multithreaded caching
+#TODO:
 #      optimise... or not
 
 import os
