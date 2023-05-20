@@ -1,4 +1,4 @@
-#TODO: mpeg style compression algorithm to render medium resolutions at more than 1 fps
+#TODO: mpeg style compression algorithm to render huge resolutions
 #      give each pixel a position or skip value, dont draw over similar pixels
 #      multithreaded caching
 #      optimise... or not
@@ -15,17 +15,20 @@ try:
 except:
     print("OpenCV-python is not installed!")
 
-outputDir = "./output"      #insert output dira
+outputDir = "./output"      #insert output directory
 treshold = 500000           #maximum array size per file
 colourMode = 3              #0: euclidean distance
-                            #1: hsv compare (slow)
-                            #2: barycentric distance (hue only, may result in goofy output)
-                            #3: flann (fast with caching, slow without)
+                            #1: hsv compare
+                            #2: barycentric distance
+                            #3: flann
 fileCaching = True          #creates file colour cache based on colour mode
                             #creating cache for the first time may be extremely slow due to badly written code
-resize = 20 / 100            #resize percentage
+if (colourMode != 3):
+    fileCaching = False     #caching is too slow without flann
+
+resize = 40 / 100           #resize percentage
 processesOverride = 0       #number of processes override
-step = 1                    #set to skip n number of frams per cycle
+step = 4                   #frames to skip per cycle
 
 cpuThreads = mp.cpu_count()
 nprocesses = cpuThreads
@@ -33,7 +36,7 @@ nprocesses = cpuThreads
 if (processesOverride > 0):
     nprocesses = processesOverride
 
-paletteCacheDir = "./palettes/" + "palette" + str(colourMode) + ".json"
+paletteCacheDir = "./flann/" + "flannCache" + ".json"
 print(paletteCacheDir)
 
 palette = [
@@ -197,7 +200,7 @@ if fileCaching:
         else:
             open(paletteCacheDir, "w").write(json.dumps({"cache": paletteCache}))
         print("Cached palette")
-    t.sleep(.1)
+    t.sleep(.5)
     cacheSize = len(paletteCache) * len(paletteCache[0]) * len(paletteCache[0][0])
 
 def scale(height, width, factor):    #define skips to work with an odd resize factor
@@ -230,11 +233,10 @@ def scale(height, width, factor):    #define skips to work with an odd resize fa
 
     return newHeight, newWidth, skipsHeight, skipsWidth
 
-def parseToFile(media, endFrame, processName, fileName, outputFolderDir, framesPerProcess):    #cant have enough args
+def parseToFile(media, startFrame, endFrame, processName, fileName, outputFolderDir):    #cant have enough args
 
     #    define variables
 
-    startFrame = (processName * framesPerProcess) + 1
     firstStartFrame = startFrame
     subBatchNumber = 0
     stop = False
@@ -260,7 +262,7 @@ def parseToFile(media, endFrame, processName, fileName, outputFolderDir, framesP
         newHeight, newWidth, skipsHeight, skipsWidth = scale(height, width, resize)
 
         totalSubBatchOutputLength = 0
-        for currFrame in range(startFrame, endFrame):
+        for currFrame in range(startFrame, endFrame, step):
 
             #    read frame
             
@@ -339,7 +341,7 @@ def parseToFile(media, endFrame, processName, fileName, outputFolderDir, framesP
                 print(processName, "Batch exceeded max treshold")
                 break
 
-            if currFrame >= endFrame - 1: stop = True    #end
+            if currFrame + step >= endFrame: stop = True    #end
                 
         outputFile.write("\"STOP\"]")    #close batch array
         outputFile.write("\n}")          #close json
@@ -357,16 +359,122 @@ def getAspectRatio(media, frame):
     height, width, var1, var2 = scale(height, width, resize)
     return width, height
 
-def flushJson(var, index, outputFolderDir):
-
+def flushBatch(var, index, outputFolderDir):
     print("Length", len(var[1]), "Index", index)
     outputFile = open(os.path.join(outputFolderDir, "frame"+str(index))+".json", "w")
     object = json.dumps({
-        "fps": var[0] / step,
+        "fps": var[0],
         "batchSize": len(var[1]), 
-        "seq": var[1]
+        "seq": var[1],
+        "step": var[2]
     })
     outputFile.write(object)
+
+def packPixel(pixel, x, y):
+    packedPixel = pixel
+    packedPixel |= (x << 8)
+    packedPixel |= (y << 16)
+    return packedPixel
+
+def unpackPixel(packedPixel):
+    pixel = (packedPixel & 0x000000FF)
+    x = (packedPixel & 0x0000FF00) >> 8
+    y = (packedPixel & 0x00FF0000) >> 16
+    return [pixel, x, y]
+
+def compressFrame(frame, prevFrame):
+    output = []
+    length = 0
+    keyframe = prevFrame == None
+    frame = frame[::-1]
+    if keyframe != True:
+        prevFrame = prevFrame[::-1]
+        for y in range(len(frame)):
+            #outputFrameX = []
+            for x in range(len(frame[0])):
+                prevPixel = prevFrame[y][x]
+                currPixel = frame[y][x]
+                if (currPixel == prevPixel):
+                    pass#output.append(-1)
+                else:
+                    #packedPixel = currPixel
+                    #packedPixel |= (y << 8)
+                    #packedPixel |= (x << 16)
+                    #outputFrameX.append(packedPixel)
+                    #output.append(packPixel(currPixel, x, y))
+                    output.append([currPixel, x, y])
+                    length += 1
+            #output.append(list(outputFrameX))
+    else:
+        for y in range(len(frame)):
+            outputFrameX = []
+            for x in range(len(frame[0])):
+                currPixel = frame[y][x]
+                #packedPixel = currPixel
+                #packedPixel |= (y << 8)
+                #packedPixel |= (x << 16)
+                #outputFrameX.append(packedPixel)
+                #output.append(packPixel(currPixel, x, y))
+                output.append([currPixel, x, y])
+                length += 1
+            #output.append(list(outputFrameX))
+    return output, length
+
+def compressMedia(mediaFolder):
+    mediaName = mediaFolder.split("/")[-1]
+    outDirectory = os.path.normpath(mediaFolder + os.sep + os.pardir)
+    try:
+        configFile = json.loads(open(os.path.join(mediaFolder, "frameconfig.json"), "r").read())
+    except Exception as e:
+        print(e)
+        return
+    try:
+        os.mkdir(os.path.join(outDirectory, mediaName + "COMPRESSED"))
+        outputFolderDir = os.path.join(outDirectory, mediaName + "COMPRESSED")
+    except Exception as e:
+        outputFolderDir = os.path.join(outDirectory, mediaName + "COMPRESSED")
+        print(e)
+
+    open(os.path.join(outputFolderDir, "frameconfig.json"), "w").write('{"totalBatches": ' + str(configFile["totalBatches"]) + ', "compressed": 1}')
+    prevFrame = []
+    keyFrame = []
+
+    oldLength = 0
+    newLength = 0
+    for i in range(configFile["totalBatches"]):    #animation level
+        j = 0
+        output = []
+        try:
+            currBatch = json.loads(open(os.path.join(mediaFolder, "frame" + str(i) + ".json"), "r").read())
+            currFps = currBatch["fps"]
+            currSeq = currBatch["seq"]
+            oldLength += len(currSeq) * len(currSeq[0]) * len(currSeq[0][0])
+        except FileNotFoundError:
+            break
+        while True:    #batch level
+            try:
+                k = 0
+                currFrame = currSeq[j]
+            except IndexError:
+                break
+            outputFrame = []
+            if (len(prevFrame) <= 0):
+                keyFrame = currFrame
+                packedKeyFrame, currLength = compressFrame(keyFrame, None)
+                newLength += currLength
+                output.append(packedKeyFrame)
+                prevFrame = currFrame
+                j += 1
+                continue
+            packedFrame, currLength = compressFrame(currFrame, prevFrame)
+            newLength += currLength
+            output.append(packedFrame)
+            prevFrame = currFrame
+            j += 1
+        flushBatch([currFps, output, step], i, outputFolderDir)
+    print("[Compression Fininished] Old Length:", oldLength, "New Length:", newLength)
+
+
 
 def start(media, outputDir, lengthOverride):
     startTime = t.perf_counter()
@@ -376,7 +484,6 @@ def start(media, outputDir, lengthOverride):
     length -= 2    #gets rid of last few frames to avoid weird bug
     fps = cv2.VideoCapture(media).get(cv2.CAP_PROP_FPS)
     lengthOverride = int(lengthOverride * fps)
-    framesPerProcess = Math.ceil(length / nprocesses)    #rough frames per process amount
     outputFolderDir = ""
 
     if (lengthOverride > length / fps):
@@ -396,21 +503,47 @@ def start(media, outputDir, lengthOverride):
     processes = []
     totalLength = 0
     totalLength2 = 0
+    totalRemainder = 0
+    processLengths = []
+    framesPerProcess = Math.ceil(length / nprocesses)
+
+    #    Calculate lengths per process
     for i in range(nprocesses):
         batchLength = framesPerProcess
-        totalLength += batchLength
-        remaindingLength = length - totalLength
+        batchRemainder = batchLength % step
+        batchLength -= batchRemainder
+        totalRemainder += batchRemainder
+        if (totalRemainder / step >= 1):
+            batchLength += step
+            totalRemainder -= step
+        print(batchLength, totalRemainder)
+        processLengths.append(batchLength)                  ################# bookmark
+        #batchLength = framesPerProcess - stepRemainder
+        #totalLength += batchLength
+        #remainingLength = length - totalLength
 
-        if remaindingLength < 0:
-            batchLength += remaindingLength
-        totalLength2 += batchLength
+        #if remainingLength < 0:
+        #    batchLength += remainingLength
+        #totalLength2 += batchLength
+    print(sum(processLengths))
+    print(length)
+    t.sleep(0)
 
-
-        process = mp.Process(target=parseToFile, args=(media, totalLength2, i, fileName, outputFolderDir, framesPerProcess))
+    startFrame = 0
+    endFrame = 0
+    for i in range(len(processLengths)):
+        if (i - 1 >= 0):
+            startFrame += processLengths[i - 1]
+        else:
+            print("i")
+            startFrame += 0
+        endFrame += processLengths[i]
+        print(startFrame + 1, endFrame)
+        process = mp.Process(target=parseToFile, args=(media, startFrame, endFrame, i, fileName, outputFolderDir))
         processes.append(process)
 
     print("Output will be", getAspectRatio(media, 0), "continue?")
-    t.sleep(3)
+    t.sleep(4)
 
     for i in range(nprocesses):
         processes[i].start()
@@ -443,8 +576,8 @@ def start(media, outputDir, lengthOverride):
             outputFile = open(loadFileName + str(batchID)+"_"+str(subBatchID)+"_TEMP").read()
         except FileNotFoundError:
             print("Next file not found, finishing...")
-            output = [fps, list(seq)]
-            flushJson(output, currTotalFiles, outputFolderDir); currTotalFiles += 1
+            output = [fps, list(seq), step]
+            flushBatch(output, currTotalFiles, outputFolderDir); currTotalFiles += 1
             break
 
         while True:
@@ -459,8 +592,8 @@ def start(media, outputDir, lengthOverride):
                         seq.append(currFrame)
 
                     if totalBatchLength + frameLength > treshold:
-                        output = [fps, list(seq)]
-                        flushJson(output, currTotalFiles, outputFolderDir); currTotalFiles += 1
+                        output = [fps, list(seq), step]
+                        flushBatch(output, currTotalFiles, outputFolderDir); currTotalFiles += 1
                         seq.clear()
                         totalBatchLength = 0
 
@@ -473,7 +606,8 @@ def start(media, outputDir, lengthOverride):
     print("Completed all processes, total", currTotalFiles, "files", " Time:", t.perf_counter() - startTime, "seconds")
 
     headerFile = open(os.path.join(outputFolderDir, "frame" + "config")+".json", "w")
-    headerFile.write('{"totalBatches": ' + str(currTotalFiles) + '}')
+    headerFile.write('{"totalBatches": ' + str(currTotalFiles) + ', "compressed": 0}')
     headerFile.close()
 
-start("badapple", outputDir, 0)
+start("badapple", outputDir, 20)
+compressMedia("./output/badapple")
