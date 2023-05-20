@@ -1,4 +1,6 @@
-#TODO:
+#TODO: mpeg style compression algorithm to render huge resolutions
+#      give each pixel a position or skip value, dont draw over similar pixels
+#      multithreaded caching
 #      optimise... or not
 
 import os
@@ -15,14 +17,15 @@ except:
 
 outputDir = "./output"      #insert output directory
 treshold = 500000           #maximum array size per file
-colourMode = 3              #0: euclidean distance
+colourMode = 3              #0: euclidean compare
                             #1: hsv compare
-                            #2: barycentric distance
+                            #2: barycentric compare (very goofy dont use)
                             #3: flann
-fileCaching = True          #creates file colour cache based on colour mode
                             #creating cache for the first time may be extremely slow due to badly written code
 if (colourMode != 3):
     fileCaching = False     #caching is too slow without flann
+else:
+    fileCaching = True
 
 resize = 40 / 100           #resize percentage
 processesOverride = 0       #number of processes override
