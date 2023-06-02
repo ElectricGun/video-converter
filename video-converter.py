@@ -1,5 +1,5 @@
 #TODO:
-#keyframe interval      
+#test for windows  
 #optimise but too lazy
 
 import os
@@ -9,6 +9,7 @@ from queue import Queue
 import numpy as np
 import math as Math
 import time as t
+import shutil
 try:
     import cv2
 except:
@@ -32,7 +33,8 @@ parser.add_argument("-b", "--batch-treshold", metavar= "\b", type=int, default= 
 parser.add_argument("-l", "--length-override",metavar= "\b", type=float,default= 0,        dest="lengthOverride",   help="Length of output in seconds. (Default max)")
 parser.add_argument("-o", "--output",         metavar= "\b", type=str, default= "./output",dest="output",           help="Output destination (Default ./output)")
 parser.add_argument("-p", "--cpu-cores",      metavar= "\b", type=int, default= "0",       dest="processesOverride",help="Amount of cpu cores to use (Default max)")
-parser.add_argument("-i", "--integrity",      metavar= "\b", type=float,default= ".99",    dest="compression",      help="Higher integrity = lower compression (Default .99)")
+parser.add_argument("-j", "--integrity",      metavar= "\b", type=float,default= ".99",    dest="compression",      help="Higher integrity = lower compression (Default .99)")
+parser.add_argument("-i", "--key-interval",   metavar= "\b", type=int,default= "30",       dest="iFrameInterval",   help="Keyframe interval (Default 30)")
 args = parser.parse_args()
 
 
@@ -182,29 +184,14 @@ def scale2(height, width, newRatio):    #define skips to work with new aspect ra
 
     newWidth, newHeight = min(newRatio[0], width), min(newRatio[1], height)
 
-    try:
-        ratioH, ratioW =  height / newHeight, width / newWidth
-    except ZeroDivisionError:
-        ratioH, ratioW = 1, 1
-    
-    if (ratioW > ratioH):
-        resize = ratioH
-    else:
-        resize = ratioW
-
-    resizedWidth = width / resize
-    resizedHeight = height / resize
-    cropX = Math.floor((resizedWidth - newWidth) * resize)
-    cropY = Math.floor((resizedHeight - newHeight) * resize)
-
-    croppedWidth = width - cropX
-    croppedHeight = height - cropY
+    cropX = 0
+    cropY = 0
 
     skipsHeight, skipsWidth = [], []
     remainder0, remainder1 = 0, 0
 
-    skipH = croppedHeight / newHeight
-    skipW = croppedWidth / newWidth
+    skipH = height / newHeight
+    skipW = width / newWidth
 
     for i in range(newHeight):
         remainder0 += skipH - Math.floor(skipH)
@@ -222,12 +209,13 @@ def scale2(height, width, newRatio):    #define skips to work with new aspect ra
             remainder1 -= 1
         skipsWidth.append(tempW) 
 
+    print(skipsWidth, skipsHeight, newWidth, newHeight)
     return newHeight, newWidth, skipsHeight, skipsWidth, cropX, cropY
 
 if fileCaching:
     paletteCache, cacheSize = startCache(colourMode == 3)
 
-def parseToFile(media, startFrame, endFrame, processName, fileName, outputFolderDir, mode):    #cant have enough args  (might rewrite if i HAVE to (i dont))
+def convert(media, startFrame, endFrame, processName, fileName, outputFolderDir, mode):    #cant have enough args  (might rewrite if i HAVE to (i dont))
 
     #    define variables
 
@@ -283,15 +271,13 @@ def parseToFile(media, startFrame, endFrame, processName, fileName, outputFolder
 
             output, outputY = [], []
             pickerY = cropY
-            for y in range(0, newHeight - 1):
+            #print(len(skipsHeight))
+            for y in range(len(skipsHeight)):
                 pickerX = cropX
-                pickerY += skipsHeight[y]
-                if len(outputY) > 0:
-                    output.append(list(outputY))
-                                                                        
+
                 outputY = []
-                for x in range(0, newWidth - 1):
-                    pickerX += skipsWidth[x]
+                for x in range(len(skipsWidth)):
+                    
                     frameCol = frame[pickerY][pickerX]
                     r, g, b = frameCol[0], frameCol[1], frameCol[2]
                     if mode == 0:
@@ -316,20 +302,28 @@ def parseToFile(media, startFrame, endFrame, processName, fileName, outputFolder
                                 pass
                     elif mode == 1:
                         resource = [r, g, b]
-
+                    print(pickerX, pickerY, (r, g, b))
+                    #if processName == 0: print(x, y); print(resource)
                     outputY.append(resource)
+                    pickerX += skipsWidth[x]
 
-            outputLength = len(output) * len(output[0])          
+                pickerY += skipsHeight[y]
+                if len(outputY) > 0:
+                    output.append(list(outputY))
+                    if (processName == 1): print(len(output))
+                                                                  
+            outputLength = len(output) * len(output[0])
+            #print(len(output))          
             outputFile.write(str(output))
             outputFile.write(",\n")    #close frame array
 
             totalSubBatchOutputLength += outputLength
 
-            if processName == 0:
-                if fileCaching:
-                    print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", cacheSize, "\n")    #print percentage
-                else:
-                    print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", len(resourceTable), "\n")
+            #if processName == 0:
+            #    if fileCaching:
+            #        print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", cacheSize, "\n")    #print percentage
+            #    else:
+            #        print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", len(resourceTable), "\n")
 
             if (totalSubBatchOutputLength + outputLength > treshold) & (currFrame - startFrame != 0):
                 subBatchNumber += 1
@@ -356,11 +350,25 @@ def getAspectRatio(media, frame):
         height, width, var1, var2, cropX, cropY = scale2(height, width, sizeOverride)
     else:
         height, width, var1, var2, cropX, cropY = scale(height, width, resize)
-    return width, height
+    return width, height, cropX, cropY
+
+def move(input, output):
+    if (os.path.exists(output) != True):
+        os.mkdir(output)
+    try:
+        shutil.move(input, output)
+    except:
+        try:
+            os.remove(os.path.join(output, os.path.basename(input)))
+        except IsADirectoryError:
+            shutil.rmtree(os.path.join(output, os.path.basename(input)))
+        shutil.move(input, output)
 
 def compressMedia(mediaFolder):
+    keyframeInterval = args.iFrameInterval
+    
     print("Compressing...")
-    mediaName = mediaFolder.split("/")[-1]
+    mediaName = os.path.basename(mediaFolder)
     outDirectory = os.path.normpath(mediaFolder + os.sep + os.pardir)
     try:
         configFile = json.loads(open(os.path.join(mediaFolder, "frameconfig.json"), "r").read())
@@ -383,6 +391,8 @@ def compressMedia(mediaFolder):
 
     oldLength = 0
     newLength = 0
+
+    frameNumber = 0
     for i in range(configFile["totalBatches"]):    #animation level
         j = 0
         output = []
@@ -411,15 +421,29 @@ def compressMedia(mediaFolder):
                 output.append(packedKeyFrame)
                 prevFrame = currFrame
                 j += 1
+                frameNumber += 1
+                print("keyframe")
                 continue
+            if (keyframeInterval != 0):
+                if ((frameNumber / keyframeInterval) % 1 == 0):
+                    packedFrame, currLength = Compress.compressFrame(currFrame, None, isRaw)
+                    newLength += currLength
+                    output.append(packedFrame)
+                    prevFrame = currFrame
+                    j += 1
+                    frameNumber += 1
+                    print("keyframe")
+                    continue
             packedFrame, currLength = Compress.compressFrame(currFrame, prevFrame, isRaw)
             newLength += currLength
             output.append(packedFrame)
             prevFrame = currFrame
             j += 1
+            frameNumber += 1
         flushBatch([currFps, output, step], i, outputFolderDir)
         print("Compressing ", i + 1, "of", configFile["totalBatches"])
     print("[Compression Fininished] Old Length:", oldLength, "New Length:", newLength)
+    move(mediaFolder, "./trash")
 
 def flushBatch(var, index, outputFolderDir):
     #print("Length", len(var[1]), "Index", index)
@@ -438,7 +462,7 @@ def start(media, outputDir, lengthOverride, mode):
     if (os.path.exists("./output") != True):
         os.mkdir("./output")
 
-    fileName = media.split("/")[-1]
+    fileName = os.path.basename(media)
     length = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
     length -= 2    #gets rid of last few frames to avoid weird bug
     fps = cv2.VideoCapture(media).get(cv2.CAP_PROP_FPS)
@@ -489,7 +513,7 @@ def start(media, outputDir, lengthOverride, mode):
             startFrame += 0
         endFrame += processLengths[i]
         #print(startFrame + 1, endFrame)
-        process = mp.Process(target=parseToFile, args=(media, startFrame, endFrame, i, fileName, outputFolderDir, mode))
+        process = mp.Process(target=convert, args=(media, startFrame, endFrame, i, fileName, outputFolderDir, mode))
         processes.append(process)
 
     print("Output will be", getAspectRatio(media, 0), "Frames:",length , "continue?")
@@ -572,4 +596,4 @@ modes = {"sorter": 0,
          "raw": 1}
 
 start(args.filename, outputDir, args.lengthOverride, modes[args.mode])
-compressMedia("./output/badapple")
+compressMedia(os.path.join("./output", os.path.basename(args.filename)))
