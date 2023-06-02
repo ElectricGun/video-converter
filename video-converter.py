@@ -31,6 +31,7 @@ parser.add_argument("-g", "--scale",          metavar= "\b", type=int, default =
 parser.add_argument("-k", "--size-override",  metavar= "\b", type=str, default = None,     dest="sizeOverride",     help="Output aspect ratio. Overrides scale percentage factor. Example: '88x88' (Optional)")
 parser.add_argument("-b", "--batch-treshold", metavar= "\b", type=int, default= 500000,    dest="batchTreshold",    help="Maximum array length per file. (Default 500000)")
 parser.add_argument("-l", "--length-override",metavar= "\b", type=float,default= 0,        dest="lengthOverride",   help="Length of output in seconds. (Default max)")
+parser.add_argument("-r", "--offset",         metavar= "\b", type=float,default= "0",        dest="secOffset",        help="Length offset in seconds (Default 0)")
 parser.add_argument("-o", "--output",         metavar= "\b", type=str, default= "./output",dest="output",           help="Output destination (Default ./output)")
 parser.add_argument("-p", "--cpu-cores",      metavar= "\b", type=int, default= "0",       dest="processesOverride",help="Amount of cpu cores to use (Default max)")
 parser.add_argument("-j", "--integrity",      metavar= "\b", type=float,default= ".99",    dest="compression",      help="Higher integrity = lower compression (Default .99)")
@@ -69,7 +70,6 @@ try:
 except:
     pass
 paletteCacheDir = os.path.join("./flann", "flannCache.json")
-print(paletteCacheDir)
 
 palette = [
     [217, 157, 115], [140, 127, 169], [235, 238, 245], [149, 171, 217], #copper, lead, metaglass, graphite
@@ -209,7 +209,7 @@ def scale2(height, width, newRatio):    #define skips to work with new aspect ra
             remainder1 -= 1
         skipsWidth.append(tempW) 
 
-    print(skipsWidth, skipsHeight, newWidth, newHeight)
+    #print(skipsWidth, skipsHeight, newWidth, newHeight)
     return newHeight, newWidth, skipsHeight, skipsWidth, cropX, cropY
 
 if fileCaching:
@@ -302,7 +302,6 @@ def convert(media, startFrame, endFrame, processName, fileName, outputFolderDir,
                                 pass
                     elif mode == 1:
                         resource = [r, g, b]
-                    print(pickerX, pickerY, (r, g, b))
                     #if processName == 0: print(x, y); print(resource)
                     outputY.append(resource)
                     pickerX += skipsWidth[x]
@@ -310,7 +309,7 @@ def convert(media, startFrame, endFrame, processName, fileName, outputFolderDir,
                 pickerY += skipsHeight[y]
                 if len(outputY) > 0:
                     output.append(list(outputY))
-                    if (processName == 1): print(len(output))
+                    #if (processName == 1): print(len(output))
                                                                   
             outputLength = len(output) * len(output[0])
             #print(len(output))          
@@ -319,11 +318,12 @@ def convert(media, startFrame, endFrame, processName, fileName, outputFolderDir,
 
             totalSubBatchOutputLength += outputLength
 
-            #if processName == 0:
-            #    if fileCaching:
-            #        print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", cacheSize, "\n")    #print percentage
-            #    else:
-            #        print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", len(resourceTable), "\n")
+            if processName == 0:
+                if fileCaching:
+                    print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", cacheSize, "\n")    #print percentage
+                else:
+                    print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", len(resourceTable), "\n")
+            print(currFrame)
 
             if (totalSubBatchOutputLength + outputLength > treshold) & (currFrame - startFrame != 0):
                 subBatchNumber += 1
@@ -456,32 +456,38 @@ def flushBatch(var, index, outputFolderDir):
     })
     outputFile.write(object)
 
-def start(media, outputDir, lengthOverride, mode):
+def start(media, outputDir, lengthOverride, offset, mode):
+    print("\n")
     startTime = t.perf_counter()
 
     if (os.path.exists("./output") != True):
         os.mkdir("./output")
 
     fileName = os.path.basename(media)
-    length = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
-    length -= 2    #gets rid of last few frames to avoid weird bug
+    mediaLength = int(cv2.VideoCapture(media).get(cv2.CAP_PROP_FRAME_COUNT))
+    mediaLength -= 2    #gets rid of last few frames to avoid weird bug
     fps = cv2.VideoCapture(media).get(cv2.CAP_PROP_FPS)
     lengthOverride = int(lengthOverride * fps)
     outputFolderDir = ""
 
-    if (lengthOverride > length):
-        pass
+    if (lengthOverride > mediaLength):
+        length = mediaLength
     elif (lengthOverride <= 0):
-        pass
+        length = mediaLength
     else:
         length = lengthOverride
+
+    frameOffset = int(offset * fps)
+
+    if (length + frameOffset > mediaLength):
+        length = mediaLength - frameOffset
 
     try:
         os.mkdir(os.path.join(outputDir, fileName))
         outputFolderDir = os.path.join(outputDir, fileName)
     except Exception as e:
         outputFolderDir = os.path.join(outputDir, fileName)
-        print(e)
+        print("Media of the same name already exists in output directory. Overwrite?")
 
     processes = []
     totalLength = 0
@@ -513,10 +519,10 @@ def start(media, outputDir, lengthOverride, mode):
             startFrame += 0
         endFrame += processLengths[i]
         #print(startFrame + 1, endFrame)
-        process = mp.Process(target=convert, args=(media, startFrame, endFrame, i, fileName, outputFolderDir, mode))
+        process = mp.Process(target=convert, args=(media, startFrame + frameOffset, endFrame + frameOffset, i, fileName, outputFolderDir, mode))
         processes.append(process)
 
-    print("Output will be", getAspectRatio(media, 0), "Frames:",length , "continue?")
+    print("Output will be", getAspectRatio(media, 0), "Frames:",length , "from frames:",frameOffset,"to",str(frameOffset + length) +"." " Continue?")
     input()
 
     for i in range(nprocesses):
@@ -595,5 +601,5 @@ def start(media, outputDir, lengthOverride, mode):
 modes = {"sorter": 0,
          "raw": 1}
 
-start(args.filename, outputDir, args.lengthOverride, modes[args.mode])
+start(args.filename, outputDir, args.lengthOverride, args.secOffset, modes[args.mode])
 compressMedia(os.path.join("./output", os.path.basename(args.filename)))
