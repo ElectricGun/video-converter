@@ -1,3 +1,3 @@
 # video-to-sorters
 
-Converts a video to a bunch of sorter configuration sequences.
+Converts a video to a bunch of values for the [Mindustry mod electricgun/video-to-logic](https://github.com/ElectricGun/video-to-logic "video-to-logic")
