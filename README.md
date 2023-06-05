@@ -1,5 +1,5 @@
 # video-converter
-
+[![Github All Releases](https://img.shields.io/github/downloads/electricgun/video-converter/total.svg)]()
 Converts a video to a bunch of values for the Mindustry mod [electricgun/video-to-logic](https://github.com/ElectricGun/video-to-logic "video-to-logic")
 
 ## How to use:
