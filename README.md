@@ -4,4 +4,5 @@ Converts a video to a bunch of values for the Mindustry mod [electricgun/video-t
 
 ## How to use:
 0. *cd* to the directory of the scripts
-1. run *python3 video-converter.py -h* for list of args
+1. Run *python3 video-converter.py "path/to/video" (args)
+Run *python3 video-converter.py -h* for list of args
