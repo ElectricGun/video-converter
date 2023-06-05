@@ -376,10 +376,10 @@ def compressMedia(mediaFolder):
         print(e)
         return
     try:
-        os.mkdir(os.path.join(outDirectory, mediaName + "COMPRESSED"))
-        outputFolderDir = os.path.join(outDirectory, mediaName + "COMPRESSED")
+        os.mkdir(os.path.join(outDirectory, mediaName + "-compressed"))
+        outputFolderDir = os.path.join(outDirectory, mediaName + "-compressed")
     except Exception as e:
-        outputFolderDir = os.path.join(outDirectory, mediaName + "COMPRESSED")
+        outputFolderDir = os.path.join(outDirectory, mediaName + "-compressed")
 
     #open(os.path.join(outputFolderDir, "frameconfig.json"), "w").write('{"totalBatches": ' + str(configFile["totalBatches"]) + ', "compressed": 1}')
     isRaw = configFile["isRaw"]
