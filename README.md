@@ -3,7 +3,7 @@
 Converts a video to a bunch of values for the Mindustry mod [electricgun/video-to-logic](https://github.com/ElectricGun/video-to-logic "video-to-logic")
 
 ## How to use:
-0. [Download](https://github.com/ElectricGun/video-converter/releases/latest) <br> <br>
+0. [Download the files](https://github.com/ElectricGun/video-converter/releases/latest) <br> <br>
 1. *cd* to the directory of the scripts <br> <br>
 2. Run *python3 video-converter.py "path/to/video"* (args) <br> <br>
 Run *python3 video-converter.py -h* for list of args <br> <br>
