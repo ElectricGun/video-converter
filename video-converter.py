@@ -20,88 +20,89 @@ import argparse
 
 #    Initialise
 
-parser = argparse.ArgumentParser()
-#        Required arguments
-parser.add_argument("filename")
-requiredArgs = parser.add_argument_group('required arguments')
-requiredArgs.add_argument("-m", "--mode",     metavar= "\b", type=str, dest="mode",                                 help="Available modes: \n 'sorter' - converts video into sorter sequence \n 'raw' - converts video into colour sequence", required=True)
-#        Optional arguments
-parser.add_argument("-s", "--step",           metavar= "\b", type=int, default = 1,        dest="step",             help="Frame steps. Output every nth frame. (Default 1)")
-parser.add_argument("-g", "--scale",          metavar= "\b", type=int, default = 1,        dest="scale",            help="Scale percentage. Scales the overall size of the media. Doesn't work with size-override (Default 100)")
-parser.add_argument("-k", "--size-override",  metavar= "\b", type=str, default = None,     dest="sizeOverride",     help="Output aspect ratio. Overrides scale percentage factor. Example: '88x88' (Optional)")
-parser.add_argument("-b", "--batch-treshold", metavar= "\b", type=int, default= 500000,    dest="batchTreshold",    help="Maximum array length per file. (Default 500000)")
-parser.add_argument("-l", "--length-override",metavar= "\b", type=float,default= 0,        dest="lengthOverride",   help="Length of output in seconds. (Default max)")
-parser.add_argument("-r", "--offset",         metavar= "\b", type=float,default= "0",        dest="secOffset",        help="Length offset in seconds (Default 0)")
-parser.add_argument("-o", "--output",         metavar= "\b", type=str, default= "./output",dest="output",           help="Output destination (Default ./output)")
-parser.add_argument("-p", "--cpu-cores",      metavar= "\b", type=int, default= "0",       dest="processesOverride",help="Amount of cpu cores to use (Default max)")
-parser.add_argument("-j", "--integrity",      metavar= "\b", type=float,default= ".99",    dest="compression",      help="Higher integrity = lower compression (Default .99)")
-parser.add_argument("-i", "--key-interval",   metavar= "\b", type=int,default= "30",       dest="iFrameInterval",   help="Keyframe interval (Default 30)")
-args = parser.parse_args()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
+    #        Required arguments
+    parser.add_argument("filename")
+    requiredArgs = parser.add_argument_group('required arguments')
+    requiredArgs.add_argument("-m", "--mode",     metavar= "\b", type=str, dest="mode",                                   help="    Available modes: \n 'sorter' - converts video into sorter sequence \n 'raw' - converts video into colour sequence", required=True)
+    #        Optional arguments
+    parser.add_argument("-s", "--step",           metavar= "\b", type=int, default = 1,        dest="step",             help="    Frame steps. Output every nth frame. (Default 1) \n")
+    parser.add_argument("-l", "--length ",        metavar= "\b", type=float,default= 0,        dest="lengthOverride",   help="    Length of output in seconds. (Default max) \n")
+    parser.add_argument("-o", "--output",         metavar= "\b", type=str, default= "./output",dest="output",           help="    Output destination (Default ./output) \n")
+    parser.add_argument("-i", "--integrity",      metavar= "\b", type=float,default= ".99",    dest="compression",      help="    Integrity of the output. Higher integrity = lower compression (Default .99) \n")
+    parser.add_argument("--key-interval",   metavar= "", type=int,default= "30",       dest="iFrameInterval",           help="Keyframe interval (Default 30) \n")
+    parser.add_argument("--scale",          metavar= "", type=int, default = 1,        dest="scale",                    help="Scale percentage. Scales the overall size of the media. Doesn't work with 'size' (Default 100) \n")
+    parser.add_argument("--size",           metavar= "", type=str, default = None,     dest="sizeOverride",             help="Output aspect ratio. Overrides scale percentage factor. Example: '88x88' (Optional) \n")
+    parser.add_argument("--batchSize",      metavar= "", type=int, default= 500000,    dest="batchTreshold",            help="Maximum array length per file. (Default 500000) \n")
+    parser.add_argument("--offset",         metavar= "", type=float,default= "0",        dest="secOffset",              help="Length offset in seconds (Default 0) \n")
+    parser.add_argument("--cpu-cores",      metavar= "", type=int, default= "0",       dest="processesOverride",        help="Amount of cpu cores to use (Default max) \n")
+    args = parser.parse_args()
 
 
-outputDir = args.output                 #insert output directory
-treshold = args.batchTreshold           #maximum array size per file
-colourMode = 3                  #0: euclidean compare
-                                #1: hsv compare
-                                #2: barycentric compare (very goofy dont use)
-                                #3: flann
-                                #creating cache for the first time may be extremely slow due to badly written code
-if (colourMode != 3):           
-    fileCaching = False         #caching is too slow without flann
-else:           
-    fileCaching = True          
-            
-resize = args.scale / 100               #resize percentage
-sizeOverride = None
-if (args.sizeOverride != None):
-    sizeOverrideStr = args.sizeOverride.split("x")
-    sizeOverride = int(sizeOverrideStr[0]), int(sizeOverrideStr[1])
-processesOverride = args.processesOverride       #number of processes override
-step = args.step                #frames to skip per cycle
+    outputDir = args.output                 #insert output directory
+    treshold = args.batchTreshold           #maximum array size per file
+    colourMode = 3                  #0: euclidean compare
+                                    #1: hsv compare
+                                    #2: barycentric compare (very goofy dont use)
+                                    #3: flann
+                                    #creating cache for the first time may be extremely slow due to badly written code
+    if (colourMode != 3):           
+        fileCaching = False         #caching is too slow without flann
+    else:           
+        fileCaching = True          
+                
+    resize = args.scale / 100               #resize percentage
+    sizeOverride = None
+    if (args.sizeOverride != None):
+        sizeOverrideStr = args.sizeOverride.split("x")
+        sizeOverride = int(sizeOverrideStr[0]), int(sizeOverrideStr[1])
+    processesOverride = args.processesOverride       #number of processes override
+    step = args.step                #frames to skip per cycle
 
-cpuThreads = mp.cpu_count()
-nprocesses = cpuThreads
+    cpuThreads = mp.cpu_count()
+    nprocesses = cpuThreads
 
-if (processesOverride > 0):
-    nprocesses = processesOverride
+    if (processesOverride > 0):
+        nprocesses = processesOverride
 
-try:
-    os.mkdir("./flann")
-except:
-    pass
-paletteCacheDir = os.path.join("./flann", "flannCache.json")
+    try:
+        os.mkdir("./flann")
+    except:
+        pass
+    paletteCacheDir = os.path.join("./flann", "flannCache.json")
 
-palette = [
-    [217, 157, 115], [140, 127, 169], [235, 238, 245], [149, 171, 217], #copper, lead, metaglass, graphite
-    [247, 203, 164], [39, 39, 39], [141, 161, 227], [249, 163, 199],    #sand, coal, titanium, thorium
-    [119, 119, 119], [83, 86, 92], [203, 217, 127], [244, 186, 110],    #scrap, silicon, plastanium, phase
-    [243, 233, 121], [116, 87, 206], [255, 121, 94], [255, 170, 95],    #surge, spore, blast, pyratite
-    [58, 143, 100], [118, 138, 154], [227, 255, 214], [137, 118, 154],  #beryllium, tungsten, oxide, carbide
-    [94, 152, 141], [223, 130, 77]                                      #fissileMatter, dormantCyst
-]
+    palette = [
+        [217, 157, 115], [140, 127, 169], [235, 238, 245], [149, 171, 217], #copper, lead, metaglass, graphite
+        [247, 203, 164], [39, 39, 39], [141, 161, 227], [249, 163, 199],    #sand, coal, titanium, thorium
+        [119, 119, 119], [83, 86, 92], [203, 217, 127], [244, 186, 110],    #scrap, silicon, plastanium, phase
+        [243, 233, 121], [116, 87, 206], [255, 121, 94], [255, 170, 95],    #surge, spore, blast, pyratite
+        [58, 143, 100], [118, 138, 154], [227, 255, 214], [137, 118, 154],  #beryllium, tungsten, oxide, carbide
+        [94, 152, 141], [223, 130, 77]                                      #fissileMatter, dormantCyst
+    ]
 
-resources = [    #only used in debugging
-            "copper", "lead", "metaglass", "graphite",
-            "sand", "coal", "titanium", "thorium",
-            "scrap", "silicon", "plastanium", "phase",
-            "surge", "spore", "blast", "pyratite",
-            "beryllium", "tungsten", "oxide", "carbide",
-            "fissileMatter", "dormantCyst"
-]
+    resources = [    #only used in debugging
+                "copper", "lead", "metaglass", "graphite",
+                "sand", "coal", "titanium", "thorium",
+                "scrap", "silicon", "plastanium", "phase",
+                "surge", "spore", "blast", "pyratite",
+                "beryllium", "tungsten", "oxide", "carbide",
+                "fissileMatter", "dormantCyst"
+    ]
 
-Colours = colours.Colours(palette)
-Compress = Comp(args.compression)
+    Colours = colours.Colours(palette)
+    Compress = Comp(args.compression)
 
-#    Initiate flann
-norm = cv2.NORM_L2
-FLANN_INDEX_KDTREE = 1
-index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=10)
-search_params = dict(checks=100)
-fm = cv2.FlannBasedMatcher(index_params, search_params)
+    #    Initiate flann
+    norm = cv2.NORM_L2
+    FLANN_INDEX_KDTREE = 1
+    index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=10)
+    search_params = dict(checks=100)
+    fm = cv2.FlannBasedMatcher(index_params, search_params)
 
-paletteHSV = []
-for col in palette:
-    paletteHSV.append(colours.getHSV(col))
+    paletteHSV = []
+    for col in palette:
+        paletteHSV.append(colours.getHSV(col))
 
 def flannFrame(frame, width, height, depth):
     matches = fm.match(np.asarray(frame, dtype=np.float32).reshape(-1, 3), np.asarray(palette, dtype=np.float32))
@@ -212,8 +213,9 @@ def scale2(height, width, newRatio):    #define skips to work with new aspect ra
     #print(skipsWidth, skipsHeight, newWidth, newHeight)
     return newHeight, newWidth, skipsHeight, skipsWidth, cropX, cropY
 
-if fileCaching:
-    paletteCache, cacheSize = startCache(colourMode == 3)
+if __name__ == '__main__':
+    if fileCaching:
+        paletteCache, cacheSize = startCache(colourMode == 3)
 
 def convert(media, startFrame, endFrame, processName, fileName, outputFolderDir, mode):    #cant have enough args  (might rewrite if i HAVE to (i dont))
 
@@ -350,7 +352,7 @@ def getAspectRatio(media, frame):
         height, width, var1, var2, cropX, cropY = scale2(height, width, sizeOverride)
     else:
         height, width, var1, var2, cropX, cropY = scale(height, width, resize)
-    return width, height, cropX, cropY
+    return width, height
 
 def move(input, output):
     if (os.path.exists(output) != True):
@@ -522,7 +524,7 @@ def start(media, outputDir, lengthOverride, offset, mode):
         process = mp.Process(target=convert, args=(media, startFrame + frameOffset, endFrame + frameOffset, i, fileName, outputFolderDir, mode))
         processes.append(process)
 
-    print("Output will be", getAspectRatio(media, 0), "Frames:",length , "from frames:",frameOffset,"to",str(frameOffset + length) +"." " Continue?")
+    print("Output size will be", getAspectRatio(media, 0), "\nTotal frames:",length , "from frames:",frameOffset,"to",str(frameOffset + length) +"." " \nContinue?")
     input()
 
     for i in range(nprocesses):
@@ -598,8 +600,8 @@ def start(media, outputDir, lengthOverride, offset, mode):
     headerFile.write(json.dumps({"totalBatches": currTotalFiles, "compressed": 0, "isRaw": mode == 1}))
     headerFile.close()
 
-modes = {"sorter": 0,
-         "raw": 1}
-
-start(args.filename, outputDir, args.lengthOverride, args.secOffset, modes[args.mode])
-compressMedia(os.path.join("./output", os.path.basename(args.filename)))
+if __name__ == '__main__':
+    modes = {"sorter": 0,
+            "raw": 1}
+    start(args.filename, outputDir, args.lengthOverride, args.secOffset, modes[args.mode])
+    compressMedia(os.path.join("./output", os.path.basename(args.filename)))
