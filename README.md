@@ -18,10 +18,13 @@ Converts a video to a bunch of values for the Mindustry mod [electricgun/video-t
 5. Run *python3 video-converter.py -h* for list of args <br> <br>
 ## Arguments:
 ### Required
+<pre>
 *   -m, --mode         Available modes: <br> 
                           'sorter' - converts video into a sequence of indices of Mindustry resource colours <br>
                           'raw'    - converts video into a sequence of raw colours <br>
+</pre>
 ### Optional
+<pre>
 * ***-o, --output*** -         Output destination (Default ./output)
 * ***-s, --step*** -           The number of frames to skip every step. This causes choppiness but cuts down the size of the output
 * ***-l, --length*** -         Length of output in seconds. Ignore this arg to convert the entire video
@@ -32,7 +35,7 @@ Converts a video to a bunch of values for the Mindustry mod [electricgun/video-t
 * ***--batchSize*** -          Maximum array length per file. Set to high for massive but fewer files, or low for many but smaller ones (Default 500000)
 * ***--offset*** -             Length offset in seconds. For example, an offset of 1 will only output from the 30th frame (Default 0)
 * ***--cpu-cores*** -          Amount of cpu cores to use, in case multithreading doesn't work (Default max) 
-
+</pre>
 
 
 
