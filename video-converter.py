@@ -3,20 +3,27 @@
 #optimise but too lazy
 
 import os
+import sys
 import json
 import multiprocessing as mp
 from queue import Queue
-import numpy as np
 import math as Math
 import time as t
 import shutil
-try:
-    import cv2
-except:
-    print("OpenCV-python is not installed!")
 import colours
 from compress import Compression as Comp
 import argparse
+
+isWindows = os.name == "nt"
+try:
+    import numpy as np
+    import cv2
+except ImportError or ModuleNotFoundError:
+    if isWindows:
+        print("Some modules are not installed! \n Please run setup-windows.bat to install the requirements.")
+    else:
+        print("Some modules are not installed! \n Please run setup.sh to install the requirements.")
+    sys.exit()
 
 #    Initialise
 
@@ -471,7 +478,6 @@ def flushBatch(var, index, outputFolderDir):
 def start(media, outputDir, lengthOverride, offset, mode):
 
     #Because windows
-    isWindows = os.name == "nt"
     if (isWindows):
         if (os.path.exists(paletteCacheDir)):
             print("Loading palette...")

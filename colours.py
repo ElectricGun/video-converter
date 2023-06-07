@@ -1,4 +1,17 @@
-import numpy as np
+
+import sys
+import os
+
+isWindows = os.name == "nt"
+try:
+    import numpy as np
+except ImportError or ModuleNotFoundError:
+    if isWindows:
+        print("\n   Some modules are not installed! \n     Please run setup-windows.bat to install the requirements.")
+    else:
+        print("\n   Some modules are not installed! \n     Please run setup.sh to install the requirements.")
+    sys.exit()
+
 import math as Math
 
 def getHSV(rgb):
