@@ -30,7 +30,7 @@ Converts a video to a bunch of values for the Mindustry mod [electricgun/video-t
 -l, --length    -      Length of output in seconds. Ignore this arg to convert the entire video
   -i, --integrity -      Integrity of the output. Set to 1 for no compression, set to a low value for maximum compression. Only relevant on "raw" mode
 --key-interval  -      Create a key frame every n frame. A key frame is completely uncompressed
-  --size          -      Output aspect ratio. Overrides scale percentage factor. **Overrides --scale**. Example: '88x88'
+  --size          -      Output aspect ratio. Overrides scale percentage factor. Overrides --scale. Example: '88x88'
 --scale         -      Scale percentage. Scales the overall size of the media. Doesn't work with --size (Default 100)
   --batchSize     -      Maximum array length per file. Set to high for massive but fewer files, or low for many but smaller ones (Default 500000)
 --offset        -      Length offset in seconds. For example, an offset of 1 will only output from the 30th frame (Default 0)
