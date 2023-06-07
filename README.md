@@ -19,9 +19,9 @@ Converts a video to a bunch of values for the Mindustry mod [electricgun/video-t
 ## Arguments:
 ### Required
 <pre>
--m, --mode      -        Available modes: <br> 
-                             'sorter' - converts video into a sequence of indices of Mindustry resource colours <br>
-                             'raw'    - converts video into a sequence of raw colours <br>
+-m, --mode      -        Available modes:
+                             'sorter' - converts video into a sequence of indices of Mindustry resource colours
+                             'raw'    - converts video into a sequence of raw colours
 </pre>
 ### Optional
 <pre>
