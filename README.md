@@ -28,15 +28,15 @@ Example: *python video-converter.py "D:\videos\among-us.mp4" -m "sorter" --size 
 ### Optional
 <pre>
 -o, --output    -      Output destination (Default ./output)
-  -s, --step      -      The number of frames to skip every step. This causes choppiness but cuts down the size of the output
+  -s, --step      -      The number of frames to skip every step. This causes choppiness but cuts down the size of the output (Default 1)
 -l, --length    -      Length of output in seconds. Ignore this arg to convert the entire video
-  -i, --integrity -      Integrity of the output. Set to 1 for no compression, set to a low value for maximum compression. Only relevant on "raw" mode
+  -i, --integrity -      Integrity of the output. Set to 1 for no compression, set to a low value for maximum compression. Only relevant on "raw" mode (Default 0.99)
 --key-interval  -      Creates an uncompressed frame for every n frames. Set to 0 for maximum space reduction (Default 30)
   --size          -      Output aspect ratio. Overrides scale percentage factor. Overrides --scale. Example: '88x88'
 --scale         -      Scale percentage. Scales the overall size of the media. Doesn't work with --size (Default 100)
   --batchSize     -      Maximum array length per file. Set to high for massive but fewer files, or low for many but smaller ones (Default 500000)
 --offset        -      Length offset in seconds. For example, an offset of 1 will only output from the 30th frame (Default 0)
-  --cpu-cores     -      Amount of cpu cores to use, in case multithreading doesn't work (Default max) 
+  --cpu-cores     -      Amount of cpu cores to use, in case multithreading doesn't work
 </pre>
 
 
