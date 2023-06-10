@@ -36,7 +36,7 @@ Example: *python video-converter.py "D:\videos\among-us.mp4" -m "sorter" --size 
 --scale         -      Scale percentage. Scales the overall size of the media. Doesn't work with --size (Default 100)
   --batchSize     -      Maximum array length per file. Set to high for massive but fewer files, or low for many but smaller ones (Default 500000)
 --offset        -      Length offset in seconds. For example, an offset of 1 will only output from the 30th frame (Default 0)
-  --cpu-cores     -      Amount of cpu cores to use, in case multithreading doesn't work
+  --cpu-cores     -      Amount of cpu cores to use, in case multiprocessing doesn't work
 </pre>
 
 
