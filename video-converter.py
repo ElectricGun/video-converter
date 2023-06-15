@@ -20,9 +20,9 @@ try:
     import cv2
 except ImportError or ModuleNotFoundError:
     if isWindows:
-        print("Some modules are not installed! \n Please run setup-windows.bat to install the requirements.")
+        print("Some modules are not installed! \nPlease run setup-windows.bat to install the requirements.")
     else:
-        print("Some modules are not installed! \n Please run setup.sh to install the requirements.")
+        print("Some modules are not installed! \nPlease run setup.sh to install the requirements.")
     sys.exit()
 
 #    Initialise
@@ -38,7 +38,7 @@ parser.add_argument("-s", "--step",           metavar= "\b", type=int, default =
 parser.add_argument("-l", "--length ",        metavar= "\b", type=float,default= 0,        dest="lengthOverride",   help="    Length of output in seconds. (Default max) \n")
 parser.add_argument("-o", "--output",         metavar= "\b", type=str, default= "./output",dest="output",           help="    Output destination (Default ./output) \n")
 parser.add_argument("-i", "--integrity",      metavar= "\b", type=float,default= ".99",    dest="compression",      help="    Integrity of the output. Higher integrity = lower compression (Default .99) \n")
-parser.add_argument("--key-interval",   metavar= "", type=int,default= "30",       dest="iFrameInterval",           help="Keyframe interval (Default 30) \n")
+parser.add_argument("--key-interval",   metavar= "", type=int,default= "0",        dest="iFrameInterval",           help="Keyframe interval (Default 0) \n")
 parser.add_argument("--scale",          metavar= "", type=int, default = 100,        dest="scale",                  help="Scale percentage. Scales the overall size of the media. Doesn't work with 'size' (Default 100) \n")
 parser.add_argument("--size",           metavar= "", type=str, default = None,     dest="sizeOverride",             help="Output aspect ratio. Overrides scale percentage factor. Overrides 'scale'. Example: '88x88' (Optional) \n")
 parser.add_argument("--batchSize",      metavar= "", type=int, default= 500000,    dest="batchTreshold",            help="Maximum array length per file. (Default 500000) \n")
@@ -333,7 +333,6 @@ def convert(media, startFrame, endFrame, processName, fileName, outputFolderDir,
                     print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", cacheSize, "\n")    #print percentage
                 else:
                     print(str(((currFrame - firstStartFrame) / (endFrame - firstStartFrame) * 100))+"% complete", " Cache size: ", len(resourceTable), "\n")
-            print(currFrame)
 
             if (totalSubBatchOutputLength + outputLength > treshold) & (currFrame - startFrame != 0):
                 subBatchNumber += 1
@@ -461,7 +460,7 @@ def compressMedia(mediaFolder):
             frameNumber += 1
         flushBatch([currFps, output, step], i, outputFolderDir)
         print("Compressing ", i + 1, "of", configFile["totalBatches"])
-    print("[Compression Fininished] Old Length:", oldLength, "New Length:", newLength)
+    print("[Compression Fininished] Old Size:", oldLength, "pixels. ", "New Size:", newLength, " pixels.")
     move(mediaFolder, "./trash")
 
 def flushBatch(var, index, outputFolderDir):
@@ -552,7 +551,16 @@ def start(media, outputDir, lengthOverride, offset, mode):
         process = mp.Process(target=convert, args=(media, startFrame + frameOffset, endFrame + frameOffset, i, fileName, outputFolderDir, mode))
         processes.append(process)
 
-    print("Output size will be", getAspectRatio(media, 0), "\nTotal frames:",length , "from frames:",frameOffset,"to",str(frameOffset + length) +"." " \nContinue?")
+    print("""\n
+        Video directory:""", media, """\n
+        Output size will be""", getAspectRatio(media, 0), """\n
+        Total frames:""", length, "from frames:", frameOffset,"to", str(frameOffset + length) + "." + """\n
+        Step: """, step, "frames", """\n
+        Keyframe interval: """, "None" if args.iFrameInterval == 0 else (args.iFrameInterval, "frames"), """\n
+        Integrity: """, args.compression, """\n
+        Size per batch: """, args.batchTreshold, "pixels", """\n
+        Using""", cpuThreads, "cores", """\n
+        Output directory:""", outputFolderDir, "\n\n\nAre you sure? (Enter)")
     input()
 
     for i in range(nprocesses):
