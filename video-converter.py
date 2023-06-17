@@ -221,9 +221,8 @@ def scale2(height, width, newRatio):    #define skips to work with new aspect ra
     return newHeight, newWidth, skipsHeight, skipsWidth, cropX, cropY
 
 cacheSize = 0
-if __name__ == '__main__':
-    if fileCaching:
-        paletteCache, cacheSize = startCache(colourMode == 3)
+if fileCaching:
+    paletteCache, cacheSize = startCache(colourMode == 3)
 
 def convert(media, startFrame, endFrame, processName, fileName, outputFolderDir, mode):    #cant have enough args  (might rewrite if i HAVE to (i dont))
 
